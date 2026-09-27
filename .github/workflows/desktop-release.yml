@@ -35,7 +35,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # npm ci installs exactly the lockfile; the pins check keeps the map
+      # stack (deck.gl, MapLibre) on the versions the app was tested with.
       - run: npm ci
+      - run: node scripts/check-pins.mjs
       - run: npm test
       - run: node --test desktop/server.test.mjs
       - run: npm run lint

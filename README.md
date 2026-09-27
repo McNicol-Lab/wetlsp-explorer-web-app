@@ -62,7 +62,7 @@ Only do this for installers from this repository or your lab.
 
 To try the app straight away, click **Download sample sites** on the start
 screen. It fetches five wetland sites (CA-DSM, FR-LGt, BR-SM1, US-BZF, CZ-Wet;
-1.3 GB) from the lab's [public data release](https://github.com/bhagyeshsagole/wetlsp-sample-data/releases/tag/v1)
+about 1 GB) from the lab's [public data release](https://github.com/McNicol-Lab/wetlsp-sample-data/releases/tag/v2)
 and opens the first one. After that download, the sites work offline. To add
 your own data:
 
@@ -167,8 +167,9 @@ WetLSP Explorer is a viewer. It does not include or process satellite imagery.
   results made with the app, credit Planet and CSDA as described in
   [References and how to cite](#references-and-how-to-cite).
 - **Sample sites and catalog.** The sample sites come from the lab's
-  [wetlsp-sample-data](https://github.com/bhagyeshsagole/wetlsp-sample-data/releases/tag/v1)
-  release. The bundled 95-site catalog ([details](public/catalog/README.md)) is
+  [wetlsp-sample-data](https://github.com/McNicol-Lab/wetlsp-sample-data/releases/tag/v2)
+  release, which holds each site's annual phenometrics and spline-smoothed
+  daily EVI only. The bundled 95-site catalog ([details](public/catalog/README.md)) is
   the WetLSP site catalog. Site IDs (for example `US-BZF`) follow FLUXNET
   naming and refer to eddy-covariance flux tower sites. The catalog's
   `base_network` column lists AmeriFlux and European flux network
@@ -226,7 +227,7 @@ method, the data, and the imagery provider, and acknowledge the ecoϕlab.
 
 **This app**
 
-- Sagole, B., & TODO: co-author (2026). *WetLSP Explorer* (Version 1.1.1)
+- Sagole, B., & McNicol, G. (2026). *WetLSP Explorer* (Version 1.2.0)
   [Computer software]. <https://github.com/bhagyeshsagole/wetlsp-explorer>
 
 ---
@@ -250,12 +251,9 @@ imagery.
 
 ## License
 
-This repository does not have a license file yet, so by default its authors
-reserve all rights to the code. **TODO for the maintainers:** choose a code
-license (for example MIT, BSD-3-Clause, or Apache-2.0) and add a `LICENSE`
-file.
+The app's source code is released under the [MIT License](LICENSE).
 
-Any code license applies only to the app's source code. It does not cover:
+The MIT License applies only to the app's source code. It does not cover:
 
 - **Published WetLSP data** (annual phenometrics and spline-smoothed daily
   EVI), which have their own terms. The WetLSP NetCDF files list

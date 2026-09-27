@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: >-
+  If you use WetLSP Explorer, please cite it as below. Please also cite the
+  WetLSP method and data and credit the imagery provider; see "References and
+  how to cite" in README.md.
+type: software
+title: WetLSP Explorer
+version: 1.2.0
+date-released: 2026-09-26
+license: MIT
+repository-code: https://github.com/bhagyeshsagole/wetlsp-explorer
+authors:
+  - family-names: Sagole
+    given-names: Bhagyesh
+  - family-names: McNicol
+    given-names: Gavin
+    affiliation: University of Illinois Chicago
+references:
+  - type: article
+    authors:
+      - family-names: Moon
+        given-names: Minkyu
+      - family-names: Richardson
+        given-names: Andrew D.
+      - family-names: Milliman
+        given-names: Thomas
+      - family-names: Friedl
+        given-names: Mark A.
+    title: A high spatial resolution land surface phenology dataset for AmeriFlux and NEON sites
+    journal: Scientific Data
+    volume: 9
+    start: 448
+    year: 2022
+    doi: 10.1038/s41597-022-01570-5
