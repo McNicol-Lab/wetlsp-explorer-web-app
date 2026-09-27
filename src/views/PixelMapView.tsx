@@ -18,7 +18,7 @@ import { ErrorPanel, seriesColor, useAsyncData, useBasemap, useDark } from './sh
 import { getPixelMeans, getPixelTrace, pixelsInPolygon } from '@/engine/queries';
 import { nearestPixelIndex } from '@/lib/pixelPicking';
 import { pixelIndex } from '@/lib/pixelIndex';
-import { GREENNESS_RAMP, sampleRamp } from '@/lib/colorscales';
+import { GREENNESS_RAMP, rampToCssGradient, sampleRamp } from '@/lib/colorscales';
 import { compositeCanvas, downloadBlob, downloadCsv, exportBackground, timestampedName } from '@/lib/export';
 import { canvasToBlob, copyImage } from '@/lib/figure';
 import { FigureMenu } from '@/components/FigureMenu';
@@ -35,7 +35,9 @@ export function PixelMapView() {
   const mapRef = useRef<MapCanvasHandle>(null);
   const [tool, setTool] = useState<Tool>('point');
   const [mode3d, setMode3d] = useState(false);
-  const [colorByEvi, setColorByEvi] = useState(false);
+  // On by default: per-pixel means come from the prepared year tables, so
+  // colouring the cloud costs nothing once the site has loaded.
+  const [colorByEvi, setColorByEvi] = useState(true);
   const [hexRadius, setHexRadius] = useState(24);
   const [map, setMap] = useState<MapLibreMap | null>(null);
 
@@ -157,7 +159,7 @@ export function PixelMapView() {
           length: n,
           attributes: {
             getPosition: { value: positions, size: 2 },
-            ...(baseColors ? { getFillColor: { value: baseColors, size: 3 } } : {}),
+            ...(baseColors ? { getFillColor: { value: baseColors, size: 3, normalized: true } } : {}),
           },
         },
         getFillColor: baseColors ? undefined : dark ? [150, 162, 178, 175] : [96, 108, 126, 165],
@@ -403,6 +405,17 @@ export function PixelMapView() {
           <Chip tone="accent">
             <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
             {formatCount(selection.length)} selected
+          </Chip>
+        )}
+        {colorByEvi && meanRange && (
+          <Chip title={`Pixel colour: mean ${ts.series[0] ?? 'spline'} EVI in ${ts.year ?? ''}`}>
+            <span className="text-[var(--text-muted)]">mean EVI {ts.year}</span>
+            <span className="tabular-nums">{formatValue(meanRange[0], 2)}</span>
+            <span
+              className="h-2 w-16 rounded-full"
+              style={{ background: rampToCssGradient(GREENNESS_RAMP) }}
+            />
+            <span className="tabular-nums">{formatValue(meanRange[1], 2)}</span>
           </Chip>
         )}
         {mode3d && <Chip>hex radius {hexRadius} m</Chip>}
