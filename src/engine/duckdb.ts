@@ -120,10 +120,18 @@ export function engineIsReady(): boolean {
 /* ------------------------------------------------------------------ files */
 
 const registered = new Map<string, Set<string>>();
+/**
+ * Bumped each time a site's files are dropped. DuckDB keeps what it learned
+ * about a file (its parquet footer) under the file's name even after
+ * `dropFile`, so a replaced site re-registered under the old name was read
+ * with the old footer: "TProtocolException: Invalid data". A new name per
+ * registration means nothing cached for the old files can be reused.
+ */
+const generation = new Map<string, number>();
 
 /** DuckDB-visible name for one stored file. */
 export function duckdbName(siteId: string, relPath: string): string {
-  return `site_${siteId.replace(/[^\w.-]/g, '_')}/${relPath}`;
+  return `site_${siteId.replace(/[^\w.-]/g, '_')}/g${generation.get(siteId) ?? 0}/${relPath}`;
 }
 
 export function sqlStr(value: string): string {
@@ -175,6 +183,7 @@ export async function unregisterSite(manifest: SiteManifest): Promise<void> {
     }
   }
   registered.delete(manifest.siteId);
+  generation.set(manifest.siteId, (generation.get(manifest.siteId) ?? 0) + 1);
 }
 
 export function isRegistered(siteId: string): boolean {
