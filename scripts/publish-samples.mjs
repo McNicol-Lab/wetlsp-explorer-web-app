@@ -3,7 +3,8 @@
  *
  *   npm run samples                        # 1. extract ../Actual Data/*.zip into samples/
  *   npm run samples:publish -- --dry-run   # 2a. check the files, write the index, upload nothing
- *   npm run samples:publish                # 2b. upload them as a public GitHub release
+ *   npm run samples:publish -- --stage DIR # 2b. or lay out the release in DIR to upload by hand
+ *   npm run samples:publish                # 2c. upload them as a public GitHub release
  *
  * The release lives in the lab's organization (McNicol-Lab/wetlsp-sample-data)
  * and must be public: the app downloads it without signing in. Its download
@@ -33,6 +34,11 @@ const REPO = process.env.SAMPLES_REPO ?? 'McNicol-Lab/wetlsp-sample-data';
 const TAG = process.env.SAMPLES_TAG ?? 'v2';
 const SRC = join(ROOT, 'samples');
 const DRY_RUN = process.argv.includes('--dry-run');
+const STAGE_AT = process.argv.includes('--stage') ? process.argv[process.argv.indexOf('--stage') + 1] : null;
+if (process.argv.includes('--stage') && !STAGE_AT) {
+  console.error('--stage needs a folder: npm run samples:publish -- --stage ../wetlsp-sample-data-v2');
+  process.exit(1);
+}
 
 const expected = `https://github.com/${REPO}/releases/download/${TAG}/`;
 if (SAMPLE_RELEASE !== expected) {
@@ -68,7 +74,8 @@ for (const site of index.sites) {
   }
 }
 console.log('Checked: every pixels_timeseries file holds only the spline series.');
-const stage = join(tmpdir(), `wetlsp-samples-${Date.now()}`);
+const stage = STAGE_AT ? resolve(STAGE_AT) : join(tmpdir(), `wetlsp-samples-${Date.now()}`);
+if (STAGE_AT) rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 
 const assets = [];
@@ -91,6 +98,28 @@ if (DRY_RUN) {
   process.exit(0);
 }
 
+const NOTES = [
+  ...index.sites.map((s) => `- **${s.siteId}**: ${s.name}. ${s.description}`),
+  '',
+  'Each site has its annual phenometrics (NetCDF, 2021–2024) and the spline-smoothed daily EVI (parquet). ' +
+    'Per-acquisition (raw) EVI is not distributed, per the NASA CSDA Program EULA for Planet data.',
+  '',
+  'This work utilized data made available through the NASA Commercial Satellite Data Acquisition (CSDA) Program. ' +
+    'Includes copyrighted material of Planet Labs PBC. All rights reserved.',
+].join('\n');
+
+if (STAGE_AT) {
+  writeFileSync(join(stage, 'RELEASE-NOTES.md'), `${NOTES}\n`);
+  const total = index.sites.reduce((n, s) => n + s.bytes, 0);
+  console.log([
+    `Staged ${assets.length + 1} files (${(total / 1024 ** 3).toFixed(2)} GB) in ${stage}`,
+    `Upload every file except RELEASE-NOTES.md as the assets of release ${TAG} on the public repo ${REPO},`,
+    'with RELEASE-NOTES.md as the release description. With the GitHub CLI:',
+    `  gh release create ${TAG} --repo ${REPO} --title "Sample sites ${TAG}" --notes-file RELEASE-NOTES.md $(ls | grep -v RELEASE-NOTES.md)`,
+  ].join('\n'));
+  process.exit(0);
+}
+
 try {
   gh('repo', 'view', REPO);
 } catch {
@@ -100,16 +129,7 @@ try {
 try {
   gh('release', 'view', TAG, '--repo', REPO);
 } catch {
-  gh('release', 'create', TAG, '--repo', REPO, '--title', `Sample sites ${TAG}`,
-    '--notes', [
-      ...index.sites.map((s) => `- **${s.siteId}**: ${s.name}. ${s.description}`),
-      '',
-      'Each site has its annual phenometrics (NetCDF, 2021–2024) and the spline-smoothed daily EVI (parquet). ' +
-        'Per-acquisition (raw) EVI is not distributed, per the NASA CSDA Program EULA for Planet data.',
-      '',
-      'This work utilized data made available through the NASA Commercial Satellite Data Acquisition (CSDA) Program. ' +
-        'Includes copyrighted material of Planet Labs PBC. All rights reserved.',
-    ].join('\n'));
+  gh('release', 'create', TAG, '--repo', REPO, '--title', `Sample sites ${TAG}`, '--notes', NOTES);
 }
 
 // A few files per call keeps a failed upload cheap to retry.

@@ -122,6 +122,7 @@ To publish a new set:
 ```sh
 npm run samples                        # extract ../Actual Data/*.zip into samples/ (git-ignored), spline only
 npm run samples:publish -- --dry-run   # check the files and update src/lib/sample-index.json
+npm run samples:publish -- --stage DIR # or lay the release out in DIR to upload by hand
 npm run samples:publish                # upload them to the release
 ```
 
