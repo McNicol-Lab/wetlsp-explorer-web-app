@@ -6,10 +6,21 @@
  *   npm run samples                       # reads ../Actual Data/*.zip
  *   SAMPLES_SRC=/path/to/zips npm run samples
  *
- * Re-running replaces `samples/`. The folder is git-ignored (≈1.4 GB).
+ * Only what the lab may redistribute is kept. Under the NASA CSDA terms for
+ * the PlanetScope imagery, published WetLSP data are the annual phenometrics
+ * (the NetCDFs) and the spline-smoothed daily EVI. The per-acquisition `raw`
+ * EVI rows are removed from `pixels_timeseries`, and the parquet READMEs say so.
+ *
+ * Needs DuckDB, either the CLI (`brew install duckdb`) or Python's `duckdb`
+ * module (`pip install duckdb`). SAMPLES_DUCKDB / SAMPLES_PYTHON pick a
+ * specific binary.
+ *
+ * Re-running replaces `samples/`. The folder is git-ignored (≈1.1 GB).
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +55,82 @@ function walk(dir) {
   });
 }
 
+/** Series the sample data may carry; everything else is dropped. */
+const KEEP_SERIES = 'spline';
+
+/** Run SQL with whichever DuckDB is installed; returns stdout. */
+function duckdb(sql) {
+  const cli = process.env.SAMPLES_DUCKDB ?? 'duckdb';
+  try {
+    return execFileSync(cli, ['-noheader', '-csv', '-c', sql], { encoding: 'utf8' });
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  const python = process.env.SAMPLES_PYTHON ?? 'python3';
+  const script =
+    'import sys, duckdb\n' +
+    'rows = duckdb.sql(sys.argv[1])\n' +
+    'print("\\n".join(",".join(str(v) for v in r) for r in rows.fetchall()) if rows is not None else "")';
+  try {
+    return execFileSync(python, ['-c', script, sql], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (err) {
+    if (err.code === 'ENOENT' || /No module named 'duckdb'/.test(String(err.stderr))) {
+      console.error('DuckDB is required: install the CLI (brew install duckdb) or `pip install duckdb`.');
+      process.exit(1);
+    }
+    throw new Error(`DuckDB failed: ${String(err.stderr || err.message).trim()}`);
+  }
+}
+
+const sqlPath = (p) => `'${p.replace(/'/g, "''")}'`;
+
+/** Rewrite a timeseries parquet in place with only the spline rows. */
+function keepSplineOnly(file) {
+  const tmp = `${file}.spline.tmp`;
+  const before = duckdb(`SELECT series, count(*) FROM read_parquet(${sqlPath(file)}) GROUP BY 1 ORDER BY 1`).trim();
+  duckdb(
+    `COPY (SELECT * FROM read_parquet(${sqlPath(file)}) WHERE series = '${KEEP_SERIES}') ` +
+      `TO ${sqlPath(tmp)} (FORMAT parquet, COMPRESSION zstd)`,
+  );
+  const other = Number(duckdb(`SELECT count(*) FROM read_parquet(${sqlPath(tmp)}) WHERE series IS DISTINCT FROM '${KEEP_SERIES}'`).trim());
+  if (other !== 0) throw new Error(`${file}: ${other} non-${KEEP_SERIES} rows survived the filter`);
+  renameSync(tmp, file);
+  return before.split('\n').map((l) => l.replace(',', ': ')).join(', ');
+}
+
+const DISTRIBUTION_NOTE =
+  'This copy contains only the spline-smoothed (gap-filled) daily EVI. The per-acquisition "raw" EVI series ' +
+  'was removed before distribution: under the NASA CSDA Program EULA for Planet data, published WetLSP data are ' +
+  'limited to the annual phenometrics and the spline-smoothed daily EVI. Includes copyrighted material of Planet ' +
+  'Labs PBC. All rights reserved.';
+
+/** Make the lab's parquet READMEs describe the file that actually ships. */
+function annotateReadmes(dir) {
+  const md = join(dir, 'README_parquet.md');
+  if (existsSync(md)) {
+    const text = readFileSync(md, 'utf8');
+    if (!text.includes('Distribution note')) {
+      const [title, ...rest] = text.split('\n');
+      writeFileSync(md, [title, '', '## Distribution note', '', DISTRIBUTION_NOTE, '', ...rest].join('\n'));
+    }
+  }
+  const json = join(dir, 'README_parquet.json');
+  if (existsSync(json)) {
+    const doc = JSON.parse(readFileSync(json, 'utf8'));
+    doc.distribution_note = DISTRIBUTION_NOTE;
+    for (const ds of doc.datasets ?? []) {
+      if (ds.id !== 'pixels_timeseries_ds') continue;
+      for (const c of ds.columns ?? []) {
+        if (c.name !== 'series') continue;
+        c.allowed_values = [KEEP_SERIES];
+        c.description = 'Time series type: spline (gap-filled daily). The raw (per-acquisition) series is not distributed.';
+      }
+      ds.notes = (ds.notes ?? []).filter((n) => !/^raw series/i.test(n));
+    }
+    writeFileSync(json, `${JSON.stringify(doc, null, 2)}\n`);
+  }
+}
+
 if (!existsSync(SRC)) {
   console.error(`No sample source folder at ${SRC}. Set SAMPLES_SRC.`);
   process.exit(1);
@@ -66,6 +153,11 @@ for (const site of SITES) {
   const dest = join(OUT, site.siteId);
   renameSync(inner, dest);
   rmSync(scratch, { recursive: true, force: true });
+
+  for (const p of walk(dest).filter((f) => /pixels_timeseries.*\.parquet$/i.test(f))) {
+    console.log(`${site.siteId}: ${relative(dest, p)} had ${keepSplineOnly(p)}; kept ${KEEP_SERIES} only`);
+  }
+  annotateReadmes(dest);
 
   const files = walk(dest).map((p) => ({ path: relative(dest, p).split('\\').join('/'), size: statSync(p).size }));
   const bytes = files.reduce((n, f) => n + f.size, 0);

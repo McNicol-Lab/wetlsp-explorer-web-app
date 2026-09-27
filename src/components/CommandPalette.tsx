@@ -152,6 +152,16 @@ export function CommandPalette() {
         ? [{ id: 'samples:download', title: 'Download the sample sites', group: 'Data', run: () => void useAppStore.getState().installSamples() }]
         : []),
       { id: 'settings:storage', title: 'Manage storage and sample sites', group: 'Data', run: () => useAppStore.getState().setSettingsOpen(true) },
+      {
+        id: 'site:reload',
+        title: 'Reload metadata for the open site',
+        group: 'Data',
+        run: () => {
+          const id = useAppStore.getState().activeSiteId;
+          if (id) void useAppStore.getState().reloadSite(id);
+        },
+      },
+      { id: 'selection:redraw', title: 'Redraw the random pixel sample', group: 'Pixel map', run: () => useAppStore.getState().redrawSample() },
       { id: 'selection:clear', title: 'Clear the pixel selection', group: 'Pixel map', run: clearSelection },
       {
         id: 'theme',

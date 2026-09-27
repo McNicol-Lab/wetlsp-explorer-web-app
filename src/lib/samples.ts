@@ -1,6 +1,7 @@
 /**
  * Sample sites, downloaded on request from the lab's public data release
- * (github.com/bhagyeshsagole/wetlsp-sample-data, tag v1).
+ * (github.com/McNicol-Lab/wetlsp-sample-data, tag v2): annual phenometrics
+ * and spline-smoothed daily EVI only.
  *
  * The list of sites and files ships inside the app (`sample-index.json`, written
  * by `npm run samples:publish`), so the "Download sample sites" button shows

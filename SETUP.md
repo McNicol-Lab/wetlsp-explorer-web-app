@@ -110,14 +110,23 @@ Always keep the original dataset folders as your permanent copy.
 
 ## Updating the sample sites (maintainers)
 
-The app's **Download sample sites** button fetches five sites from the public
-release at [wetlsp-sample-data v1](https://github.com/bhagyeshsagole/wetlsp-sample-data/releases/tag/v1).
-The installer itself does not contain them. To publish a new set:
+The app's **Download sample sites** button fetches five sites from the lab's
+public release at [McNicol-Lab/wetlsp-sample-data v2](https://github.com/McNicol-Lab/wetlsp-sample-data/releases/tag/v2).
+The installer itself does not contain them. The release holds only what the lab
+may redistribute under the NASA CSDA terms: the annual phenometric NetCDFs and
+the spline-smoothed daily EVI. `npm run samples` removes the per-acquisition
+`raw` EVI rows, and `npm run samples:publish` refuses to upload a file that
+still has them. Both need DuckDB (`brew install duckdb` or `pip install duckdb`).
+To publish a new set:
 
 ```sh
-npm run samples           # extract ../Actual Data/*.zip into samples/ (git-ignored)
-npm run samples:publish   # upload them to the release and update src/lib/sample-index.json
+npm run samples                        # extract ../Actual Data/*.zip into samples/ (git-ignored), spline only
+npm run samples:publish -- --dry-run   # check the files and update src/lib/sample-index.json
+npm run samples:publish -- --stage DIR # or lay the release out in DIR to upload by hand
+npm run samples:publish                # upload them to the release
 ```
 
-Then commit `src/lib/sample-index.json` and build a new installer. The app
-learns about files from that index, so the index and the release must match.
+A new repository or tag also means updating `SAMPLE_RELEASE` in
+`desktop/server.mjs`, the one address the app downloads samples from. Then
+commit `src/lib/sample-index.json` and build a new installer. The app learns
+about files from that index, so the index and the release must match.

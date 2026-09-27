@@ -13,8 +13,12 @@ const mime = {
   '.csv': 'text/csv', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8',
 };
 
-/** The one place sample-site downloads may come from. */
-export const SAMPLE_RELEASE = 'https://github.com/bhagyeshsagole/wetlsp-sample-data/releases/download/v1/';
+/**
+ * The one place sample-site downloads may come from: the lab's public release
+ * (spline-only daily EVI and annual phenometrics). The dev server imports
+ * this too, and scripts/publish-samples.mjs refuses to publish anywhere else.
+ */
+export const SAMPLE_RELEASE = 'https://github.com/McNicol-Lab/wetlsp-sample-data/releases/download/v2/';
 const SAMPLE_ASSET = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**

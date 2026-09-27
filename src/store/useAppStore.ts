@@ -13,7 +13,14 @@ import type {
   SiteMeta,
   ViewId,
 } from '@/lib/types';
-import { deleteManifest, loadAllManifests, loadSetting, loadSiteMeta, saveSetting } from '@/lib/idb';
+import {
+  deleteManifest,
+  loadAllManifests,
+  loadSetting,
+  loadSiteMeta,
+  saveSetting,
+  saveSiteMeta,
+} from '@/lib/idb';
 import {
   deleteSite as deleteSiteFiles,
   siteBytes,
@@ -24,11 +31,18 @@ import { indexCatalog, loadCatalog } from '@/lib/catalog';
 import { expandArchives, ingestEntries, type IngestEntry } from '@/lib/ingest';
 import { splitSites } from '@/lib/detect';
 import { sampleEntries, sampleSites, type SampleSite } from '@/lib/samples';
-import { formatBytes } from '@/lib/format';
-import { clearQueryCaches, getPixelGeometry, getSiteFacts, getSiteMeta } from '@/engine/queries';
+import { formatBytes, formatCount } from '@/lib/format';
+import {
+  clearGeometryCache,
+  clearQueryCaches,
+  getPixelGeometry,
+  getSiteFacts,
+  getSiteMeta,
+} from '@/engine/queries';
 import { unregisterSite } from '@/engine/duckdb';
 import { releaseSite } from '@/engine/netcdf';
-import { DEFAULT_PIXEL_SAMPLE, DEFAULT_SELECTION_CAP } from '@/engine/sql';
+import { DEFAULT_PIXEL_SAMPLE, DEFAULT_SELECTION_CAP, MAX_PIXEL_SAMPLE } from '@/engine/sql';
+import { newSeed, randomSample } from '@/lib/sampling';
 import { CancelledError } from '@/lib/rpc';
 import type { BasemapId } from '@/lib/basemaps';
 
@@ -71,6 +85,8 @@ export interface TimeseriesSettings {
   showPixels: boolean;
   /** Green-up, peak and green-down markers estimated from the mean line. */
   showKeyDates: boolean;
+  /** Seed of the random pixel sample; a new seed draws different pixels. */
+  sampleSeed: number;
 }
 
 /** One site in a multi-site import. */
@@ -133,8 +149,11 @@ interface AppState {
 
   /* interaction */
   selection: number[];
+  /** How many pixels a rectangle or lasso takes; larger shapes are sampled. */
   selectionCap: number;
-  selectionClipped: boolean;
+  /** Every pixel inside the last rectangle or lasso, for redrawing its sample. */
+  selectionPool: Int32Array | null;
+  selectionSeed: number;
   focusedPixel: number | null;
   plottedPixels: number[];
 
@@ -174,13 +193,18 @@ interface AppState {
   cancelImport(): void;
   setSettingsOpen(open: boolean): void;
   selectSite(siteId: string): Promise<void>;
-  loadSite(siteId: string): Promise<void>;
+  loadSite(siteId: string, opts?: { rereadMeta?: boolean }): Promise<void>;
+  /** Re-read a site's metadata and geometry from its stored files. */
+  reloadSite(siteId: string): Promise<void>;
   removeSite(siteId: string): Promise<void>;
   refreshStorage(): Promise<void>;
   setCatalog(sites: CatalogSite[], source: 'bundled' | 'user' | 'none'): void;
   setCatalogFocus(siteId: string | null): void;
 
-  setSelection(ids: number[] | Int32Array, opts?: { clipped?: boolean; announce?: boolean }): void;
+  /** Select the pixels inside a shape, sampling at random above the cap. */
+  selectShape(pool: Int32Array): void;
+  /** A new random sample of the last shape. */
+  redrawSample(): void;
   togglePixel(id: number): void;
   clearSelection(): void;
   setSelectionCap(cap: number): void;
@@ -204,6 +228,7 @@ const defaultTimeseries: TimeseriesSettings = {
   showIqr: true,
   showPixels: false,
   showKeyDates: true,
+  sampleSeed: newSeed(),
 };
 
 const IDLE_INGEST = { active: false, progress: null, controller: null, queue: null };
@@ -241,7 +266,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   selection: [],
   selectionCap: DEFAULT_SELECTION_CAP,
-  selectionClipped: false,
+  selectionPool: null,
+  selectionSeed: newSeed(),
   focusedPixel: null,
   plottedPixels: [],
 
@@ -413,7 +439,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeSiteId: siteId,
       catalogFocusId: siteId,
       selection: [],
-      selectionClipped: false,
+      selectionPool: null,
       focusedPixel: null,
       plottedPixels: [],
       timeseries: {
@@ -432,9 +458,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().loadSite(siteId);
   },
 
-  async loadSite(siteId) {
+  async loadSite(siteId, opts = {}) {
     const state = get().sites[siteId];
-    if (!state || state.status === 'loading' || state.status === 'ready') return;
+    if (!state || state.status === 'loading') return;
+    if (state.status === 'ready' && !opts.rereadMeta) return;
 
     const patch = (p: Partial<SiteState>) =>
       set((s) =>
@@ -445,9 +472,28 @@ export const useAppStore = create<AppState>((set, get) => ({
     const notes: string[] = [...state.manifest.warnings];
 
     try {
-      const meta = Object.keys(state.meta).length
-        ? state.meta
-        : await getSiteMeta(state.manifest).catch(() => ({}) as SiteMeta);
+      // A stored meta with nothing in it is never trusted: an earlier read may
+      // have failed. Re-read it, and say why when that fails too.
+      let meta = state.meta;
+      let metaError: string | null = null;
+      if (state.manifest.meta && (opts.rereadMeta || Object.keys(meta).length === 0)) {
+        try {
+          meta = await getSiteMeta(state.manifest);
+          if (Object.keys(meta).length > 0) void saveSiteMeta(siteId, meta);
+          else metaError = '`pixels_meta` was read but holds no rows.';
+        } catch (err) {
+          meta = {};
+          // DuckDB appends the failing SQL on later lines; the first says why.
+          metaError = (err instanceof Error ? err.message : String(err)).split('\n')[0];
+        }
+      }
+      if (metaError) notes.push(`Could not read \`pixels_meta\`: ${metaError}`);
+      // An import-time read failure is history once the meta has been read.
+      if (Object.keys(meta).length > 0) {
+        for (let i = notes.length - 1; i >= 0; i--) {
+          if (notes[i].startsWith('Could not read `pixels_meta` while importing')) notes.splice(i, 1);
+        }
+      }
 
       const facts = await getSiteFacts(state.manifest);
 
@@ -456,7 +502,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         try {
           geometry = await getPixelGeometry(state.manifest, meta);
         } catch (err) {
-          notes.push(err instanceof Error ? err.message : String(err));
+          const message = err instanceof Error ? err.message : String(err);
+          // "No CRS found" is misleading when the meta itself could not be read.
+          notes.push(
+            metaError
+              ? 'Pixels cannot be placed on the map until `pixels_meta` (which holds the CRS) can be read. Use "Reload metadata" to try again.'
+              : message,
+          );
         }
       }
 
@@ -470,7 +522,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Defaults that make the first chart appear untouched: newest year with
       // data, `spline` if present, otherwise whatever the file has.
       const ts = get().timeseries;
-      const year = ts.year ?? facts.years[facts.years.length - 1] ?? null;
+      const year =
+        ts.year !== null && facts.years.includes(ts.year)
+          ? ts.year
+          : (facts.years[facts.years.length - 1] ?? null);
       const series = facts.series.includes('spline')
         ? ['spline']
         : facts.series.slice(0, 1);
@@ -484,11 +539,40 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ phenometrics: { ...ph, panels: [{ siteId, year: latest.year }] } });
       }
     } catch (err) {
-      patch({
-        status: 'error',
-        error: err instanceof Error ? err.message : String(err),
-        notes,
-      });
+      const message = err instanceof Error ? err.message : String(err);
+      patch({ status: 'error', error: message, notes });
+      if (get().activeSiteId === siteId) {
+        get().toast({ kind: 'error', title: `${siteId} could not be opened`, detail: message });
+      }
+    }
+  },
+
+  async reloadSite(siteId) {
+    const state = get().sites[siteId];
+    if (!state || state.status === 'loading') return;
+    // Start from the stored files: drop DuckDB's handles and every cache
+    // derived from the old metadata, including the reprojected pixels.
+    await unregisterSite(state.manifest).catch(() => undefined);
+    clearQueryCaches(siteId);
+    await clearGeometryCache(siteId);
+    set((s) => ({
+      sites: { ...s.sites, [siteId]: { ...s.sites[siteId], status: 'idle', facts: null, geometry: null } },
+    }));
+    await get().loadSite(siteId, { rereadMeta: true });
+    const after = get().sites[siteId];
+    if (after?.status === 'ready') {
+      const problem = after.notes.find((n) => n.startsWith('Could not read `pixels_meta`'));
+      get().toast(
+        problem
+          ? { kind: 'error', title: `${siteId}: metadata still unreadable`, detail: problem }
+          : {
+              kind: 'success',
+              title: `${siteId} reloaded`,
+              detail: after.geometry
+                ? `Metadata re-read · ${after.geometry.crsName ?? 'CRS resolved'}`
+                : 'Metadata re-read.',
+            },
+      );
     }
   },
 
@@ -514,10 +598,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       const sites = { ...s.sites };
       delete sites[siteId];
       const siteOrder = s.siteOrder.filter((id) => id !== siteId);
+      const wasActive = s.activeSiteId === siteId;
       return {
         sites,
         siteOrder,
-        activeSiteId: s.activeSiteId === siteId ? (siteOrder[0] ?? null) : s.activeSiteId,
+        activeSiteId: wasActive ? (siteOrder[0] ?? null) : s.activeSiteId,
+        ...(wasActive ? { selection: [], selectionPool: null, focusedPixel: null, plottedPixels: [] } : {}),
         phenometrics: {
           ...s.phenometrics,
           panels: s.phenometrics.panels.filter((p) => p.siteId !== siteId),
@@ -546,33 +632,40 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ catalogFocusId: siteId });
   },
 
-  setSelection(ids, opts = {}) {
-    const arr = Array.from(ids);
+  selectShape(pool) {
     const cap = get().selectionCap;
-    const clipped = opts.clipped ?? arr.length > cap;
-    const kept = arr.slice(0, cap);
-    set({ selection: kept, selectionClipped: clipped });
-    if (clipped && opts.announce !== false) {
+    const seed = newSeed();
+    set({ selection: Array.from(randomSample(pool, cap, seed)), selectionPool: pool, selectionSeed: seed });
+    if (pool.length > cap) {
       get().toast({
-        kind: 'warning',
-        title: `Selection capped at ${cap} pixels`,
-        detail: `${arr.length.toLocaleString('en-US')} pixels fell inside the shape. Raise the cap in the inspector if you need more.`,
+        kind: 'info',
+        title: `Random sample of ${formatCount(cap)} pixels`,
+        detail: `${formatCount(pool.length)} pixels fell inside the shape. Redraw the sample for different pixels, or raise the sample size in the inspector.`,
       });
     }
+  },
+
+  redrawSample() {
+    const { selectionPool: pool, selectionCap: cap } = get();
+    if (!pool || pool.length <= cap) return;
+    const seed = newSeed();
+    set({ selection: Array.from(randomSample(pool, cap, seed)), selectionSeed: seed });
   },
 
   togglePixel(id) {
     const current = get().selection;
     const idx = current.indexOf(id);
     if (idx >= 0) {
-      set({ selection: current.filter((p) => p !== id), selectionClipped: false });
+      set({ selection: current.filter((p) => p !== id) });
       return;
     }
-    if (current.length >= get().selectionCap) {
+    // The sample size only limits shapes. A click is always honoured up to the
+    // most pixels one chart can plot.
+    if (current.length >= MAX_PIXEL_SAMPLE) {
       get().toast({
         kind: 'warning',
         title: 'Selection is full',
-        detail: `The cap is ${get().selectionCap} pixels. Clear some, or raise the cap in the inspector.`,
+        detail: `A chart can plot at most ${formatCount(MAX_PIXEL_SAMPLE)} pixels. Click a selected pixel to remove it, or clear the selection.`,
       });
       return;
     }
@@ -580,12 +673,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   clearSelection() {
-    set({ selection: [], selectionClipped: false, focusedPixel: null });
+    set({ selection: [], selectionPool: null, focusedPixel: null });
   },
 
   setSelectionCap(cap) {
-    const next = Math.max(1, Math.min(5000, Math.round(cap)));
-    set((s) => ({ selectionCap: next, selection: s.selection.slice(0, next) }));
+    const next = Math.max(1, Math.min(MAX_PIXEL_SAMPLE, Math.round(cap)));
+    const { selectionPool: pool, selectionSeed: seed } = get();
+    // Same seed: a larger sample keeps every pixel of the smaller one.
+    set(pool ? { selectionCap: next, selection: Array.from(randomSample(pool, next, seed)) } : { selectionCap: next });
   },
 
   setFocusedPixel(id) {

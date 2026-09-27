@@ -3,7 +3,7 @@
  * GitHub-skyline style, with orbit controls.
  *
  * One column per finite cell, in a cartesian OrbitView — no basemap, no
- * projection, just the surface.
+ * projection, just the surface. The Phenometrics grid mounts one per panel.
  */
 import { useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import DeckGL from '@deck.gl/react';
@@ -16,11 +16,13 @@ export interface Raster3DHandle {
   canvas(): HTMLCanvasElement | null;
 }
 
-interface Cell {
-  position: [number, number];
-  value: number;
-  col: number;
-  row: number;
+/** Finite cells packed into typed arrays: no per-cell objects on big rasters. */
+interface Cells {
+  length: number;
+  positions: Float32Array;
+  values: Float32Array;
+  /** Row-major index into the source raster, for the tooltip's col / row. */
+  source: Int32Array;
 }
 
 export const Raster3D = forwardRef<
@@ -52,8 +54,16 @@ export const Raster3D = forwardRef<
   }));
 
   const { cells, extent } = useMemo(() => {
-    const out: Cell[] = [];
     const { width, height, values } = slice;
+    let finite = 0;
+    for (let i = 0; i < values.length; i++) if (Number.isFinite(values[i])) finite++;
+    const out: Cells = {
+      length: finite,
+      positions: new Float32Array(finite * 2),
+      values: new Float32Array(finite),
+      source: new Int32Array(finite),
+    };
+    let k = 0;
     // Normalise the grid to roughly 100 units across so the camera framing is
     // independent of raster size.
     const step = 100 / Math.max(width, height);
@@ -73,12 +83,11 @@ export const Raster3D = forwardRef<
         maxX = Math.max(maxX, x);
         maxY = Math.max(maxY, y);
         maxValue = Math.max(maxValue, v);
-        out.push({
-          position: [x, y],
-          value: v,
-          col,
-          row,
-        });
+        out.positions[k * 2] = x;
+        out.positions[k * 2 + 1] = y;
+        out.values[k] = v;
+        out.source[k] = row * width + col;
+        k++;
       }
     }
     if (!out.length) {
@@ -119,19 +128,19 @@ export const Raster3D = forwardRef<
 
   const layers = useMemo(
     () => [
-      new ColumnLayer<Cell>({
+      new ColumnLayer({
         id: 'relief',
-        data: cells,
+        data: { length: cells.length, attributes: { getPosition: { value: cells.positions, size: 2 } } },
         diskResolution: 4,
         angle: 45,
         radius: extent.step * 0.72,
         extruded: true,
         pickable: true,
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-        getPosition: (d) => d.position,
-        getElevation: (d) => ((d.value - lo) / span) * elevationSpan,
-        getFillColor: (d) => {
-          const c = scale.color(d.value);
+        getElevation: (_: unknown, { index }: { index: number }) =>
+          ((cells.values[index] - lo) / span) * elevationSpan,
+        getFillColor: (_: unknown, { index }: { index: number }) => {
+          const c = scale.color(cells.values[index]);
           return [c[0], c[1], c[2], 255];
         },
         material: {
@@ -154,8 +163,9 @@ export const Raster3D = forwardRef<
         controller={{ inertia: 250 }}
         layers={layers}
         getTooltip={(info: PickingInfo) => {
-          const cell = info.object as Cell | undefined;
-          if (!cell || !getTooltip) return null;
+          if (!getTooltip || info.index < 0 || info.index >= cells.length) return null;
+          const at = cells.source[info.index];
+          const cell = { col: at % slice.width, row: Math.floor(at / slice.width), value: cells.values[info.index] };
           return {
             html: getTooltip(cell),
             style: {

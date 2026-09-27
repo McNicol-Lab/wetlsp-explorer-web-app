@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "repo": "bhagyeshsagole/wetlsp-sample-data",
-  "tag": "v1",
+  "repo": "McNicol-Lab/wetlsp-sample-data",
+  "tag": "v2",
   "sites": [
     {
       "siteId": "CA-DSM",
       "name": "Delta salt marsh",
       "description": "Tidal high marsh on Boundary Bay, British Columbia",
-      "bytes": 270419259,
+      "bytes": 192277987,
       "files": [
         {
           "path": "CA-DSM-wetlsp-2021.nc",
@@ -41,17 +41,17 @@
         },
         {
           "path": "CA_DSM_pixels_timeseries.parquet",
-          "size": 236759029,
+          "size": 158617085,
           "asset": "CA-DSM--CA_DSM_pixels_timeseries.parquet"
         },
         {
           "path": "README_parquet.json",
-          "size": 6269,
+          "size": 6562,
           "asset": "CA-DSM--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 3751,
+          "size": 4130,
           "asset": "CA-DSM--README_parquet.md"
         }
       ]
@@ -60,7 +60,7 @@
       "siteId": "FR-LGt",
       "name": "La Guette",
       "description": "Acidic fen in the Sologne, France, disturbed and invaded by purple moor-grass",
-      "bytes": 286422878,
+      "bytes": 206933103,
       "files": [
         {
           "path": "FR-LGt-wetlsp-2021.nc",
@@ -94,17 +94,17 @@
         },
         {
           "path": "FR_LGt_pixels_timeseries.parquet",
-          "size": 246983971,
+          "size": 167493524,
           "asset": "FR-LGt--FR_LGt_pixels_timeseries.parquet"
         },
         {
           "path": "README_parquet.json",
-          "size": 6269,
+          "size": 6562,
           "asset": "FR-LGt--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 3751,
+          "size": 4130,
           "asset": "FR-LGt--README_parquet.md"
         }
       ]
@@ -113,7 +113,7 @@
       "siteId": "BR-SM1",
       "name": "Cachoeira do Sul",
       "description": "Flooded rice paddy, Rio Grande do Sul, Brazil",
-      "bytes": 300098267,
+      "bytes": 214293648,
       "files": [
         {
           "path": "BR-SM1-wetlsp-2021.nc",
@@ -147,17 +147,17 @@
         },
         {
           "path": "BR_SM1_pixels_timeseries.parquet",
-          "size": 263447775,
+          "size": 177642484,
           "asset": "BR-SM1--BR_SM1_pixels_timeseries.parquet"
         },
         {
           "path": "README_parquet.json",
-          "size": 6269,
+          "size": 6562,
           "asset": "BR-SM1--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 3751,
+          "size": 4130,
           "asset": "BR-SM1--README_parquet.md"
         }
       ]
@@ -166,16 +166,16 @@
       "siteId": "US-BZF",
       "name": "Bonanza Creek fen",
       "description": "Rich fen in interior Alaska",
-      "bytes": 259914742,
+      "bytes": 186270168,
       "files": [
         {
           "path": "README_parquet.json",
-          "size": 6269,
+          "size": 6562,
           "asset": "US-BZF--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 3751,
+          "size": 4130,
           "asset": "US-BZF--README_parquet.md"
         },
         {
@@ -210,7 +210,7 @@
         },
         {
           "path": "US_BZF_pixels_timeseries.parquet",
-          "size": 242174436,
+          "size": 168529190,
           "asset": "US-BZF--US_BZF_pixels_timeseries.parquet"
         }
       ]
@@ -219,7 +219,7 @@
       "siteId": "CZ-Wet",
       "name": "Třeboň wet meadow",
       "description": "Wet sedge meadow, Czechia",
-      "bytes": 306694831,
+      "bytes": 216680535,
       "files": [
         {
           "path": "CZ-Wet-wetlsp-2021.nc",
@@ -253,17 +253,17 @@
         },
         {
           "path": "CZ_Wet_pixels_timeseries.parquet",
-          "size": 264741912,
+          "size": 174726944,
           "asset": "CZ-Wet--CZ_Wet_pixels_timeseries.parquet"
         },
         {
           "path": "README_parquet.json",
-          "size": 6269,
+          "size": 6562,
           "asset": "CZ-Wet--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 3751,
+          "size": 4130,
           "asset": "CZ-Wet--README_parquet.md"
         }
       ]

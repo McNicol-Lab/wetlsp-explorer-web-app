@@ -144,7 +144,15 @@ export function LoadingPanel({
   );
 }
 
-export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function ErrorPanel({
+  message,
+  onRetry,
+  retryLabel = 'Try again',
+}: {
+  message: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+}) {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-8 text-center">
       <h4 className="text-[14px] font-semibold">That did not work</h4>
@@ -154,7 +162,7 @@ export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: ()
           onClick={onRetry}
           className="text-[12.5px] text-[var(--accent)] underline underline-offset-2"
         >
-          Try again
+          {retryLabel}
         </button>
       )}
     </div>

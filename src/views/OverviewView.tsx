@@ -5,7 +5,7 @@
 import { useMemo, useRef } from 'react';
 import { ScatterplotLayer, TextLayer } from '@deck.gl/layers';
 import type { PickingInfo } from '@deck.gl/core';
-import { MapPin, Upload } from 'lucide-react';
+import { MapPin, RotateCw, Upload } from 'lucide-react';
 import { MapCanvas, type MapCanvasHandle } from '@/components/MapCanvas';
 import { Button, Card, Chip, EmptyState, StatTile } from '@/components/ui';
 import { useAppStore, type SiteState } from '@/store/useAppStore';
@@ -341,16 +341,41 @@ export function OverviewInspector() {
         </Card>
       )}
 
-      {state && state.notes.length > 0 && (
-        <Card title="Notes">
-          <ul className="space-y-1.5 text-[12.5px] leading-snug text-[var(--text-muted)]">
-            {state.notes.map((n) => (
-              <li key={n} className="flex gap-1.5">
-                <span className="text-amber-500">•</span>
-                {n}
-              </li>
-            ))}
-          </ul>
+      {state && (state.notes.length > 0 || state.status === 'error' || state.status === 'ready') && (
+        <Card
+          title={state.status === 'error' ? 'Could not open this site' : 'Notes'}
+          actions={
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<RotateCw size={12} className={state.status === 'loading' ? 'animate-spin' : undefined} />}
+              disabled={state.status === 'loading'}
+              onClick={() => void useAppStore.getState().reloadSite(state.manifest.siteId)}
+              title="Read pixels_meta and the pixel geometry again from the stored files"
+            >
+              Reload metadata
+            </Button>
+          }
+        >
+          {state.status === 'error' && state.error && (
+            <p className="mb-2 rounded-[9px] bg-red-500/10 px-2.5 py-2 text-[12.5px] leading-snug text-red-600 dark:text-red-400">
+              {state.error}
+            </p>
+          )}
+          {state.notes.length > 0 ? (
+            <ul className="space-y-1.5 text-[12.5px] leading-snug text-[var(--text-muted)]">
+              {state.notes.map((n) => (
+                <li key={n} className="flex gap-1.5">
+                  <span className="text-amber-500">•</span>
+                  {n}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            state.status === 'ready' && (
+              <p className="text-[12.5px] text-[var(--text-muted)]">No problems found while loading.</p>
+            )
+          )}
         </Card>
       )}
     </div>

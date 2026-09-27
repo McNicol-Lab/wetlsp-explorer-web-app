@@ -16,7 +16,9 @@ import {
   type TimeseriesFilters,
 } from './sql';
 import { CancelledError } from '@/lib/rpc';
-import { readCacheFile, writeCacheFile } from '@/lib/opfs';
+import { deleteCacheFile, readCacheFile, writeCacheFile } from '@/lib/opfs';
+import { randomSample } from '@/lib/sampling';
+import { analysisYears } from '@/lib/years';
 import type {
   DailySummaryRow,
   PixelGeometry,
@@ -201,6 +203,11 @@ async function unpackGeometry(file: File): Promise<PixelGeometry> {
   };
 }
 
+/** Forget a site's reprojected geometry, so the next load recomputes it. */
+export async function clearGeometryCache(siteId: string): Promise<void> {
+  await deleteCacheFile(geomCacheKey(siteId));
+}
+
 /**
  * Pixel geometry with both projected and WGS84 coordinates. Computed once per
  * site and cached in OPFS — reprojection is deterministic, so a cache hit is
@@ -298,13 +305,15 @@ export async function getSiteFacts(
     const counts = col<ArrayLike<number>>(t, 'n');
     const dmin = t.getChild('date_min');
     const dmax = t.getChild('date_max');
-    const yearSet = new Set<number>();
+    const kept = new Set(
+      analysisYears(Array.from(years, Number), manifest.netcdf.map((n) => n.year)),
+    );
     const seriesSet = new Set<string>();
     let rows = 0;
     let lo: string | null = null;
     let hi: string | null = null;
     for (let i = 0; i < series.length; i++) {
-      yearSet.add(Number(years[i]));
+      if (!kept.has(Number(years[i]))) continue;
       seriesSet.add(series[i]);
       rows += Number(counts[i]);
       const a = isoDate(dmin?.get(i));
@@ -312,7 +321,7 @@ export async function getSiteFacts(
       if (a && (!lo || a < lo)) lo = a;
       if (b && (!hi || b > hi)) hi = b;
     }
-    facts.years = [...yearSet].sort((a, b) => a - b);
+    facts.years = [...kept].sort((a, b) => a - b);
     // `spline` first: it is the default series and the app colours it as the accent.
     facts.series = [...seriesSet].sort((a, b) =>
       a === 'spline' ? -1 : b === 'spline' ? 1 : a.localeCompare(b),
@@ -363,31 +372,21 @@ export async function getDistinctPixelIds(
   return ids;
 }
 
-/** Deterministic hash so the "random" sample is reproducible across reloads. */
-function mix32(v: number, seed: number): number {
-  let h = (v ^ seed) >>> 0;
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
-  return (h ^ (h >>> 16)) >>> 0;
-}
-
+/**
+ * A uniform random sample of the pixels with data. The same seed gives the
+ * same pixels, so a chart stays put until the user asks for a new sample.
+ */
 export async function samplePixelIds(
   manifest: SiteManifest,
   years: number[],
   series: string[],
   n: number,
-  opts: QueryOptions & { seed?: number } = {},
+  opts: QueryOptions & { seed: number },
 ): Promise<{ ids: Int32Array; available: number }> {
   const all = await getDistinctPixelIds(manifest, years, series, opts);
   const cap = Math.min(Math.max(1, Math.floor(n)), MAX_PIXEL_SAMPLE);
   if (all.length <= cap) return { ids: all, available: all.length };
-
-  const seed = opts.seed ?? 0x9e3779b9;
-  const order = Array.from(all, (id, i) => ({ id, h: mix32(i, seed) }));
-  order.sort((a, b) => a.h - b.h);
-  const ids = Int32Array.from(order.slice(0, cap), (o) => o.id);
-  ids.sort();
-  return { ids, available: all.length };
+  return { ids: randomSample(all, cap, opts.seed), available: all.length };
 }
 
 /* ------------------------------------------------------------ timeseries */
@@ -536,18 +535,17 @@ export async function getPixelMeans(
 
 /* -------------------------------------------------------------- polygons */
 
+/** Every pixel id inside the ring, in file order. */
 export async function pixelsInPolygon(
   geometry: PixelGeometry,
   ring: Float64Array,
-  cap: number,
   opts: QueryOptions = {},
-): Promise<{ ids: Int32Array; total: number; clipped: boolean }> {
+): Promise<Int32Array> {
   return geoWorker.call('pixelsInPolygon', [
     geometry.lon,
     geometry.lat,
     geometry.pixelId,
     ring,
-    cap,
   ], { signal: opts.signal });
 }
 

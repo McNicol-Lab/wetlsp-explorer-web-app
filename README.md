@@ -11,6 +11,7 @@ A desktop app for **Mac** and **Windows**. Your data stays on your computer.
 | Follow step-by-step instructions | **[SETUP.md](SETUP.md)** |
 | Fix a problem | [Troubleshooting](SETUP.md#if-something-goes-wrong) |
 | See what the app does | [The five views](#the-five-views) · [Video walkthrough](#video-walkthrough) |
+| Cite the app or its data | [References and how to cite](#references-and-how-to-cite) · [Data sources](#data-sources-and-attribution) |
 
 ---
 
@@ -61,7 +62,7 @@ Only do this for installers from this repository or your lab.
 
 To try the app straight away, click **Download sample sites** on the start
 screen. It fetches five wetland sites (CA-DSM, FR-LGt, BR-SM1, US-BZF, CZ-Wet;
-1.3 GB) from the lab's [public data release](https://github.com/bhagyeshsagole/wetlsp-sample-data/releases/tag/v1)
+about 1 GB) from the lab's [public data release](https://github.com/McNicol-Lab/wetlsp-sample-data/releases/tag/v2)
 and opens the first one. After that download, the sites work offline. To add
 your own data:
 
@@ -131,3 +132,137 @@ See WetLSP Explorer in action: **Gavin's WetLSP** (YouTube).
 </a>
 
 [▶ Watch on YouTube](https://youtu.be/ggAGSodHSn0)
+
+---
+
+## Data sources and attribution
+
+WetLSP Explorer is a viewer. It does not include or process satellite imagery.
+
+- **WetLSP products.** The site folders the app opens (annual
+  `*-wetlsp-<year>.nc` phenometric NetCDFs and the `pixels_*` Parquet tables
+  of daily EVI) are Wetland Land Surface Phenology (WetLSP) products made by
+  the Ecosystem and Planetary Health Integration Lab (ecoϕlab) at the
+  University of Illinois Chicago with the
+  [WetLSP pipeline](https://github.com/McNicol-Lab/WetLSP). That pipeline is a
+  fork of the [PLSP](https://github.com/BU-LCSC/PLSP) algorithms from Boston
+  University's Land Cover & Surface Climate Group (Moon et al., 2022), updated
+  for FLUXNET-CH4 wetland sites. PlanetScope surface reflectance scenes
+  (2021–2024) are filtered and converted to EVI, then gap-filled and smoothed
+  with a spline to give daily per-pixel EVI. Annual phenometrics (green-up,
+  peak, green-down, EVI amplitude, quality flags, and so on) are then computed
+  using the definitions in Moon et al. (2022). Published WetLSP data are the
+  annual phenometrics and the spline-smoothed daily EVI. Per-acquisition
+  (unsmoothed) EVI values are an internal processing step and are not
+  distributed.
+- **PlanetScope imagery.** The PlanetScope imagery (2021–2024) was obtained
+  through the [NASA Commercial Satellite Data Acquisition (CSDA) Program](https://science.nasa.gov/earth-science/csda/vendor-planet/).
+  Includes copyrighted material of Planet Labs PBC. All rights reserved.
+  Published WetLSP data are limited to annual phenometrics and gap-filled,
+  spline-smoothed daily EVI. They are shared as Derived Products under the
+  [CSDA Program EULA for Planet Data](https://www.earthdata.nasa.gov/s3fs-public/2022-02/Planet_Expanded_EULA_06-21.pdf).
+  Raw PlanetScope scenes, surface reflectance bands, per-acquisition
+  (unsmoothed) index values, and Planet quality masks are **not** distributed
+  with this app, its installers, or the sample data. If you publish figures or
+  results made with the app, credit Planet and CSDA as described in
+  [References and how to cite](#references-and-how-to-cite).
+- **Sample sites and catalog.** The sample sites come from the lab's
+  [wetlsp-sample-data](https://github.com/McNicol-Lab/wetlsp-sample-data/releases/tag/v2)
+  release, which holds each site's annual phenometrics and spline-smoothed
+  daily EVI only. The bundled 95-site catalog ([details](public/catalog/README.md)) is
+  the WetLSP site catalog. Site IDs (for example `US-BZF`) follow FLUXNET
+  naming and refer to eddy-covariance flux tower sites. The catalog's
+  `base_network` column lists AmeriFlux and European flux network
+  affiliations. The app contains no flux-tower measurements.
+- **Basemaps.** Map backgrounds are loaded at runtime from OpenFreeMap
+  (OpenStreetMap data) and Esri World Imagery, with attribution shown on the
+  map. They are not PlanetScope imagery.
+
+---
+
+## References and how to cite
+
+If you use WetLSP Explorer or WetLSP data in a publication, please cite the
+method, the data, and the imagery provider, and acknowledge the ecoϕlab.
+
+**Method and original phenology dataset**
+
+- Moon, M., Richardson, A. D., Milliman, T., & Friedl, M. A. (2022). A high
+  spatial resolution land surface phenology dataset for AmeriFlux and NEON
+  sites. *Scientific Data*, 9, 448.
+  <https://doi.org/10.1038/s41597-022-01570-5>
+- Moon, M., Richardson, A. D., Milliman, T., & Friedl, M. A. (2023). *Land
+  Surface Phenology, Eddy Covariance Tower Sites, North America, 2017-2021*
+  (Version 1). ORNL DAAC. <https://doi.org/10.3334/ORNLDAAC/2033>
+
+**Code**
+
+- PLSP, the original algorithms (Boston University Land Cover & Surface
+  Climate Group): <https://github.com/BU-LCSC/PLSP>
+- WetLSP, the ecoϕlab fork used to generate WetLSP products:
+  <https://github.com/McNicol-Lab/WetLSP>
+
+**WetLSP data**
+
+- WetLSP site-level products (v001). Ecosystem and Planetary Health
+  Integration Lab (ecoϕlab), University of Illinois Chicago.
+  **Dataset DOI: TODO, not yet assigned.** Until a DOI exists, cite Moon et
+  al. (2022) and the WetLSP repository, and include this acknowledgment:
+  "WetLSP processing and site-level products generated by the Ecosystem and
+  Planetary Health Integration Lab (UIC)."
+
+**PlanetScope imagery (NASA CSDA)**
+
+- Planet Team (2026). Planet Application Program Interface: In Space for Life
+  on Earth. San Francisco, CA. <https://api.planet.com>
+- Include this acknowledgment, which CSDA requires: "This work utilized data
+  made available through the NASA Commercial Satellite Data Acquisition (CSDA)
+  Program."
+- Label figures and products made from the imagery with CSDA's derived-product
+  copyright marking: "Includes copyrighted material of Planet Labs PBC. All
+  rights reserved."
+- CSDA asks authorized users to send it a courtesy copy of any publication that
+  includes CSDA-distributed data
+  ([CSDA Planet vendor page](https://science.nasa.gov/earth-science/csda/vendor-planet/)).
+
+**This app**
+
+- Sagole, B., & McNicol, G. (2026). *WetLSP Explorer* (Version 1.2.0)
+  [Computer software]. <https://github.com/bhagyeshsagole/wetlsp-explorer>
+
+---
+
+## Acknowledgments
+
+WetLSP data and scientific guidance come from the Ecosystem and Planetary
+Health Integration Lab (ecoϕlab, the McNicol Lab) in the Department of Earth
+and Environmental Sciences at the University of Illinois Chicago. The WetLSP
+data contributors are Gavin McNicol, Aarin Bothra, Youmi Oh, Lichen Liu,
+Sparkle Malone, and Qing Zhu. The phenology algorithms were developed by
+Minkyu Moon, Andrew D. Richardson, Thomas Milliman, and Mark A. Friedl. WetLSP
+data were developed for wetland methane research in the ecoϕlab, the ESIIL AI
+for Natural Methane Working Group, and the USGS Powell Synthesis for Wetlands.
+We thank the flux tower site teams and networks (AmeriFlux, FLUXNET /
+FLUXNET-CH4, and European flux networks) whose sites anchor the WetLSP
+catalog, and Planet Labs PBC and the NASA CSDA Program for the PlanetScope
+imagery.
+
+---
+
+## License
+
+The app's source code is released under the [MIT License](LICENSE).
+
+The MIT License applies only to the app's source code. It does not cover:
+
+- **Published WetLSP data** (annual phenometrics and spline-smoothed daily
+  EVI), which have their own terms. The WetLSP NetCDF files list
+  `license = CC-BY-4.0` in their metadata.
+- **PlanetScope imagery**, including raw scenes, reflectance bands,
+  per-acquisition index values, and quality masks. These are copyrighted by
+  Planet Labs PBC, governed by the CSDA Program EULA for Planet Data, and not
+  redistributed here.
+- **Basemap tiles**, which are covered by their providers' terms.
+
+The WetLSP and PLSP code repositories linked above do not have license files
+either. Ask their authors before reusing that code.

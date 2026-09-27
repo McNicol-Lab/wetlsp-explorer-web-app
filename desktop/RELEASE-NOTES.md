@@ -1,3 +1,22 @@
+**New in v1.2.0**
+
+- **Random pixel samples you can redraw.** A rectangle or lasso around more
+  pixels than the sample size now takes a true random sample from the whole
+  shape, not a stripe along its top. *Redraw* picks different pixels. The Time
+  Series has *New random sample* too. Clicking pixels is no longer blocked at 500.
+- **3D relief for every panel.** Phenometrics draws one 3D view per selected
+  site-year, side by side, and exports all of them.
+- **Years 2021–2024.** Charts offer only the years with phenometrics files and
+  open on the latest.
+- **Load problems are shown, with a fix.** If a site's metadata cannot be read,
+  the Overview says why, and *Reload metadata* reads it again. The app warns
+  when a site's metadata names a different site than its files.
+- **Sample sites moved** to the lab's release (McNicol-Lab/wetlsp-sample-data),
+  now about 1 GB: annual phenometrics and spline-smoothed daily EVI only.
+- Map zoom buttons moved to the bottom right, where toolbars no longer cover
+  them. The chart toolbar no longer sits on the plot. Large sites export and
+  inspect pixels faster.
+
 **Fixed in v1.1.1: Copy.** The *Copy* button (and ⌘⇧C / Ctrl+Shift+C) failed
 in the desktop app with "Write permission denied". Charts and maps now copy to
 the clipboard as images.

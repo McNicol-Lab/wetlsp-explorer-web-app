@@ -5,6 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 import { Readable } from 'node:stream';
 import type { Connect, Plugin } from 'vite';
+import { SAMPLE_RELEASE } from './desktop/server.mjs';
 
 /**
  * Dev and preview servers stream sample-site downloads from the public data
@@ -12,7 +13,7 @@ import type { Connect, Plugin } from 'vite';
  * the "Download sample sites" button can be tested without packaging.
  */
 function proxySamples(): Plugin {
-  const release = 'https://github.com/bhagyeshsagole/wetlsp-sample-data/releases/download/v1/';
+  const release = SAMPLE_RELEASE;
   const handler: Connect.NextHandleFunction = async (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (!url.pathname.startsWith('/remote-samples/')) return next();

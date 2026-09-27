@@ -1,7 +1,7 @@
 {
   "name": "wetlsp-explorer",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.2.0",
   "type": "module",
   "description": "Explore Wetland Land Surface Phenology datasets locally on macOS and Windows.",
   "scripts": {
@@ -26,15 +26,19 @@
     "samples:publish": "node scripts/publish-samples.mjs"
   },
   "dependencies": {
-    "@deck.gl/maplibre": "^9.4.0",
+    "@deck.gl/aggregation-layers": "9.4.0",
+    "@deck.gl/core": "9.4.0",
+    "@deck.gl/layers": "9.4.0",
+    "@deck.gl/maplibre": "9.4.0",
+    "@deck.gl/react": "9.4.0",
     "@duckdb/duckdb-wasm": "^1.29.0",
     "apache-arrow": "^17.0.0",
     "clsx": "^2.1.1",
-    "deck.gl": "^9.1.0",
+    "deck.gl": "9.4.0",
     "h5wasm": "^0.7.8",
     "idb-keyval": "^6.2.1",
     "lucide-react": "^0.460.0",
-    "maplibre-gl": "^5.0.0",
+    "maplibre-gl": "5.24.0",
     "plotly.js-dist-min": "^2.35.2",
     "proj4": "^2.12.1",
     "react": "^18.3.1",
@@ -70,5 +74,6 @@
     "workbox-strategies": "^7.4.1"
   },
   "main": "desktop/main.mjs",
-  "author": "WetLSP Explorer contributors"
+  "author": "Bhagyesh Sagole and Gavin McNicol",
+  "license": "MIT"
 }

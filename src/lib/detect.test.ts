@@ -7,6 +7,7 @@ import {
   parseNetcdfName,
   siteIdFromTableName,
   stripCommonRoot,
+  siteIdMismatch,
 } from './detect';
 
 const KB = 1024;
@@ -216,5 +217,51 @@ describe('splitSites', () => {
   it('cleans Drive archive names into folder hints', () => {
     expect(cleanFolderHint('CA-DSM-20260925T181322Z-1-001.zip')).toBe('CA-DSM');
     expect(cleanFolderHint('US-Myb')).toBe('US-Myb');
+  });
+});
+
+describe('site id consistency', () => {
+  const files = (id: string, parquetId = id.replace('-', '_')) => [
+    { path: `${id}/${id}-wetlsp-2024.nc`, size: 10 },
+    { path: `${id}/${parquetId}_pixels_geom.parquet`, size: 10 },
+    { path: `${id}/${parquetId}_pixels_meta.parquet`, size: 10 },
+  ];
+
+  it('treats CA_DSM and CA-DSM as the same site', () => {
+    const d = detectDataset(files('CA-DSM'), 'CA-DSM');
+    expect(d.namedIds.files).toEqual(['CA-DSM']);
+    expect(d.warnings.some((w) => w.includes('more than one site'))).toBe(false);
+    expect(siteIdMismatch('CA-DSM', d.namedIds)).toBeNull();
+  });
+
+  it('warns when pixels_meta names a different site than the files', () => {
+    const d = detectDataset(files('CA-SCB'), 'CA-SCB');
+    const warning = siteIdMismatch('CA-SCC', d.namedIds);
+    expect(warning).toContain('pixels_meta names this site CA-SCC');
+    expect(warning).toContain('the file names say CA-SCB');
+    expect(warning).toContain('the folder is named CA-SCB');
+  });
+
+  it('warns when the file names disagree with each other', () => {
+    const d = detectDataset(files('CA-SCB', 'CA_SCC'));
+    expect(d.warnings.find((w) => w.includes('more than one site'))).toContain('CA-SCB, CA_SCC');
+  });
+
+  it('ignores folder names that are not site ids', () => {
+    const d = detectDataset(files('US-BZF'), 'Downloads');
+    expect(d.namedIds.folder).toBeNull();
+    expect(siteIdMismatch('US-BZF', d.namedIds)).toBeNull();
+  });
+});
+
+describe('site id spelling', () => {
+  it('pools CA_DSM and CA-DSM votes and keeps the hyphenated id', () => {
+    // Two parquet names outvote one NetCDF name unless the spellings are pooled.
+    const d = detectDataset([
+      { path: 'AT-Nsd/AT-Nsd-wetlsp-2024.nc', size: 1 },
+      { path: 'AT-Nsd/AT_Nsd_pixels_geom.parquet', size: 1 },
+      { path: 'AT-Nsd/AT_Nsd_pixels_meta.parquet', size: 1 },
+    ]);
+    expect(d.siteId).toBe('AT-Nsd');
   });
 });

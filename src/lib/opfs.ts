@@ -149,6 +149,15 @@ export async function readCacheFile(key: string): Promise<File | null> {
   }
 }
 
+export async function deleteCacheFile(key: string): Promise<void> {
+  try {
+    const dir = await dirFor([CACHE_DIR], { create: false });
+    await dir.removeEntry(safeSegment(key));
+  } catch {
+    /* not cached */
+  }
+}
+
 export async function clearCache(): Promise<void> {
   try {
     const r = await root();
