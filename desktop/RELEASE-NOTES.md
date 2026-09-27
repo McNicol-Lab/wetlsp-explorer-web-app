@@ -1,3 +1,7 @@
+**New in v1.2.3: a coloured pixel map.** The Pixel Map now opens with each
+pixel coloured by its mean EVI for the selected year, with a legend. Switch it
+off with *Mean EVI* in the map toolbar.
+
 **New in v1.2.2: charts load in about a second.** Each year of a site is
 prepared once in the background as soon as the site opens, and saved offline.
 The first chart, switching years or sites, and drawing a new random sample
