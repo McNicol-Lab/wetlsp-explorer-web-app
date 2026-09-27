@@ -1,3 +1,9 @@
+**New in v1.2.2: charts load in about a second.** Each year of a site is
+prepared once in the background as soon as the site opens, and saved offline.
+The first chart, switching years or sites, and drawing a new random sample
+now take under a second instead of 15–20 seconds. The prepared data uses
+about 20 MB per year per site of offline storage; removing a site deletes it.
+
 **Fixed in v1.2.1: sites that "could not be opened".** Removing a site and
 downloading or importing it again in the same session could fail with
 "TProtocolException: Invalid data" (or "NotReadableError" when importing over
