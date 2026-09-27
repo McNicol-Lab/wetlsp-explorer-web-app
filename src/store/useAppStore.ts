@@ -40,6 +40,7 @@ import {
   getSiteMeta,
 } from '@/engine/queries';
 import { unregisterSite } from '@/engine/duckdb';
+import { prefetchSite } from '@/engine/yearCache';
 import { releaseSite } from '@/engine/netcdf';
 import { DEFAULT_PIXEL_SAMPLE, DEFAULT_SELECTION_CAP, MAX_PIXEL_SAMPLE } from '@/engine/sql';
 import { newSeed, randomSample } from '@/lib/sampling';
@@ -516,6 +517,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       patch({ meta, facts, geometry, bytesOnDisk, status: 'ready', notes });
 
+      // Decode every year of the default series in the background, newest
+      // first, so charts and year switches do not wait on a file scan.
+      if (get().activeSiteId === siteId) {
+        prefetchSite(state.manifest, facts.years, facts.series.includes('spline') ? 'spline' : (facts.series[0] ?? 'spline'));
+      }
+
       // A load finishing in the background must not change another site's filters.
       if (get().activeSiteId !== siteId) return;
 
@@ -709,7 +716,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 async function forgetSite(manifest: SiteManifest): Promise<void> {
   await unregisterSite(manifest).catch(() => undefined);
   await releaseSite(manifest.siteId).catch(() => undefined);
-  clearQueryCaches(manifest.siteId);
+  await clearQueryCaches(manifest.siteId);
   await clearGeometryCache(manifest.siteId);
 }
 
