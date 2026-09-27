@@ -186,7 +186,7 @@ export function detectDataset(rawFiles: InputFile[], folderHint?: string): Detec
       vote(siteId, 3);
       if (siteId) fileIds.add(siteId);
       if (year === null) {
-        warnings.push(`Could not read a year out of "${basename(f.path)}" — it was skipped.`);
+        warnings.push(`Could not read a year from "${basename(f.path)}", so it was skipped.`);
         unrecognised.push(stored);
       } else {
         netcdf.push({ ...stored, year });
@@ -295,9 +295,9 @@ export function detectDataset(rawFiles: InputFile[], folderHint?: string): Detec
       'No `pixels_meta` table found, so the coordinate reference system is unknown. Pixels will stay in projected metres until a CRS is supplied.',
     );
   if (!timeseries)
-    warnings.push('No `pixels_timeseries` table found — the EVI time series view will be empty.');
+    warnings.push('No `pixels_timeseries` table found, so the Time Series view will be empty.');
   if (netcdf.length === 0)
-    warnings.push('No WetLSP NetCDF files found — the phenometrics view will be empty.');
+    warnings.push('No WetLSP NetCDF files found, so the Phenometrics view will be empty.');
 
   const dupYears = netcdf
     .map((n) => n.year)

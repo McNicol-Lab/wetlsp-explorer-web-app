@@ -41,7 +41,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         title: 'Ready to work offline',
         detail: persisted
           ? 'The app and query engine are cached. Browser storage is persistent.'
-          : 'The app and query engine are cached. Browser storage remains best-effort.',
+          : 'The app and query engine are cached. Browser storage is best effort.',
       });
       void refreshStorage();
     } catch (err) {
@@ -120,7 +120,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                   ]}
                 />
               </Field>
-              <Field label="Basemap" hint={online ? undefined : 'offline — tiles unavailable'}>
+              <Field label="Basemap" hint={online ? undefined : 'unavailable while offline'}>
                 <Segmented
                   size="sm"
                   value={basemap}
@@ -150,13 +150,13 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               </Button>
               <div className="flex flex-wrap gap-1.5">
                 <Chip tone={storage.persisted ? 'accent' : 'neutral'}>
-                  {storage.persisted ? 'Storage is persistent' : 'Storage is best-effort'}
+                  {storage.persisted ? 'Storage is persistent' : 'Storage is best effort'}
                 </Chip>
                 {engineReady && <Chip tone="accent">Engine cached</Chip>}
               </div>
               <p className="text-[11.5px] leading-snug text-[var(--text-muted)]">
                 Basemap tiles are cached as you browse. With no network the maps fall back to a
-                plain background — pixel positions stay correct.
+                plain background, and pixel positions stay correct.
               </p>
             </div>
           </Card>
@@ -217,7 +217,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               onChange={() => undefined}
               disabled
               label="Everything stays on this machine"
-              hint="No backend, no telemetry. Files are read in the browser and stored in its private filesystem."
+              hint="Nothing is sent to a server, and there is no telemetry. Files are read on this computer and kept in the app's private storage."
             />
           </Card>
         </div>

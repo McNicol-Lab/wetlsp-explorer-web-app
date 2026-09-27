@@ -84,7 +84,7 @@ export function CommandPalette() {
       if (loadedNorm.has(s.site_id.replace(/[-_]/g, '').toLowerCase())) continue;
       out.push({
         id: `catalog:${s.site_id}`,
-        title: s.site_name ? `${s.site_id} — ${s.site_name}` : s.site_id,
+        title: s.site_name ? `${s.site_id} · ${s.site_name}` : s.site_id,
         group: 'Catalog',
         hint: s.country,
         run: () => {

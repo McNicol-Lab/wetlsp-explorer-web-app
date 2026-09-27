@@ -165,7 +165,7 @@ function buildDictionary(): Record<string, LayerInfo> {
     dict[`${base.layer}_2`] = {
       ...base,
       layer: `${base.layer}_2`,
-      description: `${base.description} — second detected cycle`,
+      description: `${base.description} (second detected cycle)`,
       cycle: 2,
     };
   }
@@ -213,7 +213,7 @@ export function layerInfo(layer: string): LayerInfo {
   if (known) return known;
   return {
     layer,
-    description: 'Layer not in the WetLSP dictionary — metadata read from the file.',
+    description: 'Not in the WetLSP layer dictionary; its metadata comes from the file.',
     units: '',
     scale: 1,
     validMin: Number.NaN,
