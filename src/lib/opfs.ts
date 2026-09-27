@@ -158,6 +158,20 @@ export async function deleteCacheFile(key: string): Promise<void> {
   }
 }
 
+/** Remove every cache file whose name starts with `prefix`. */
+export async function deleteCacheFiles(prefix: string): Promise<void> {
+  let dir: FileSystemDirectoryHandle;
+  try {
+    dir = await dirFor([CACHE_DIR], { create: false });
+  } catch {
+    return;
+  }
+  const names: string[] = [];
+  // @ts-expect-error - keys() is present on FileSystemDirectoryHandle at runtime.
+  for await (const name of dir.keys()) if ((name as string).startsWith(safeSegment(prefix))) names.push(name as string);
+  for (const name of names) await dir.removeEntry(name).catch(() => undefined);
+}
+
 export async function clearCache(): Promise<void> {
   try {
     const r = await root();

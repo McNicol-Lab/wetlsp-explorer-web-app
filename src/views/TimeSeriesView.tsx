@@ -787,7 +787,8 @@ function ExportButtons({
     const b = d.bundle;
     const rows: Array<Array<unknown>> = new Array(b.rows);
     for (let i = 0; i < b.rows; i++) {
-      rows[i] = [b.pixelId[i], b.seriesNames[b.seriesIdx[i]], isoFromMs(b.time[i]), b.evi[i]];
+      // Values are stored as Float32; 7 significant digits is exactly what they hold.
+      rows[i] = [b.pixelId[i], b.seriesNames[b.seriesIdx[i]], isoFromMs(b.time[i]), Number(b.evi[i].toPrecision(7))];
     }
     downloadCsv(
       timestampedName([site?.manifest.siteId, 'evi-pixels', ts.year], 'csv'),

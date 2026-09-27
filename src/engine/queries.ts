@@ -6,15 +6,22 @@ import * as arrow from 'apache-arrow';
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { getDb, registerSite, tableRef } from './duckdb';
 import {
-  buildDailySummarySql,
-  buildDistinctPixelsSql,
   buildFactsSql,
-  buildPixelMeanSql,
-  buildPixelTraceSql,
-  buildTimeseriesSql,
+  buildWhere,
   MAX_PIXEL_SAMPLE,
+  MAX_RESULT_ROWS,
+  UnboundedQueryError,
   type TimeseriesFilters,
 } from './sql';
+import { forgetYearTables, loadYearTables } from './yearCache';
+import {
+  dailySummary,
+  distinctPixels,
+  extractBundle,
+  pixelMeans,
+  type TimeseriesBundle,
+  type YearTable,
+} from '@/lib/yearTable';
 import { CancelledError } from '@/lib/rpc';
 import { deleteCacheFile, readCacheFile, writeCacheFile } from '@/lib/opfs';
 import { randomSample } from '@/lib/sampling';
@@ -274,10 +281,37 @@ export async function getPixelGeometry(
 
 /* ----------------------------------------------------------------- facts */
 
+const factsKey = (siteId: string) => `facts-v1-${siteId}.json`;
+const factsSource = (m: SiteManifest) =>
+  `${m.importedAt}:${m.timeseries?.totalBytes ?? 0}:${m.geom?.totalBytes ?? 0}:${m.netcdf.map((n) => n.year).join(',')}`;
+
+/**
+ * What the site holds: years, series, pixel and row counts. Counting means
+ * one pass over the whole time series, so the answer is kept offline and
+ * reused until the site's files change.
+ */
 export async function getSiteFacts(
   manifest: SiteManifest,
   opts: QueryOptions = {},
 ): Promise<SiteFacts> {
+  const source = factsSource(manifest);
+  try {
+    const cached = await readCacheFile(factsKey(manifest.siteId));
+    if (cached) {
+      const saved = JSON.parse(await cached.text()) as { source: string; facts: SiteFacts };
+      if (saved.source === source) return saved.facts;
+    }
+  } catch {
+    /* unreadable cache: recount */
+  }
+  const facts = await countSiteFacts(manifest, opts);
+  await writeCacheFile(factsKey(manifest.siteId), new Blob([JSON.stringify({ source, facts })])).catch(
+    () => undefined,
+  );
+  return facts;
+}
+
+async function countSiteFacts(manifest: SiteManifest, opts: QueryOptions): Promise<SiteFacts> {
   const facts: SiteFacts = {
     years: [],
     series: [],
@@ -348,7 +382,30 @@ function isoDate(value: unknown): string | null {
 
 /* ---------------------------------------------------------------- pixels */
 
-const distinctCache = new Map<string, Int32Array>();
+/**
+ * Every chart below reads year tables (lib/yearTable.ts) rather than
+ * scanning `pixels_timeseries`: a random sample touches every row group of
+ * that file, so each query used to decode all of it. The tables are built
+ * once per year, kept offline, and prepared in the background.
+ */
+async function yearTables(
+  manifest: SiteManifest,
+  years: number[],
+  series: string[],
+  opts: QueryOptions,
+): Promise<YearTable[]> {
+  if (years.length === 0 || series.length === 0) {
+    throw new UnboundedQueryError('a query needs a year and a series');
+  }
+  const out: YearTable[] = [];
+  // One series at a time (DuckDB has a single worker); all of a series'
+  // missing years come from one pass.
+  for (const s of series) {
+    const tables = await loadYearTables(manifest, years, s, opts);
+    for (const y of years) out.push(tables.get(y)!);
+  }
+  return out;
+}
 
 export async function getDistinctPixelIds(
   manifest: SiteManifest,
@@ -356,20 +413,8 @@ export async function getDistinctPixelIds(
   series: string[],
   opts: QueryOptions = {},
 ): Promise<Int32Array> {
-  const key = `${manifest.siteId}|${years.join(',')}|${series.join(',')}`;
-  const hit = distinctCache.get(key);
-  if (hit) return hit;
   if (!manifest.timeseries) return new Int32Array(0);
-
-  await registerSite(manifest);
-  opts.onProgress?.({ phase: 'Finding pixels with data', fraction: null });
-  const t = await streamQuery(
-    buildDistinctPixelsSql(tableRef(manifest.siteId, manifest.timeseries), years, series),
-    opts,
-  );
-  const ids = Int32Array.from(col<ArrayLike<number>>(t, 'pixel_id'));
-  distinctCache.set(key, ids);
-  return ids;
+  return distinctPixels(await yearTables(manifest, years, series, opts));
 }
 
 /**
@@ -391,16 +436,7 @@ export async function samplePixelIds(
 
 /* ------------------------------------------------------------ timeseries */
 
-export interface TimeseriesBundle {
-  seriesNames: string[];
-  pixelId: Int32Array;
-  seriesIdx: Uint8Array;
-  /** Epoch milliseconds. */
-  time: Float64Array;
-  evi: Float64Array;
-  rows: number;
-  pixelsLoaded: number;
-}
+export type { TimeseriesBundle } from '@/lib/yearTable';
 
 export async function getTimeseries(
   manifest: SiteManifest,
@@ -408,46 +444,9 @@ export async function getTimeseries(
   opts: QueryOptions = {},
 ): Promise<TimeseriesBundle> {
   if (!manifest.timeseries) throw new Error('This site has no `pixels_timeseries` table.');
-  await registerSite(manifest);
-  const sql = buildTimeseriesSql(tableRef(manifest.siteId, manifest.timeseries), filters);
-  const t = await streamQuery(sql, opts);
-
-  const pixelId = Int32Array.from(col<ArrayLike<number>>(t, 'pixel_id'));
-  const time = Float64Array.from(col<ArrayLike<number>>(t, 't'));
-  const evi = Float64Array.from(col<ArrayLike<number>>(t, 'evi'));
-
-  const seriesNames: string[] = [];
-  const seriesIdx = new Uint8Array(t.numRows);
-  const seriesColumn = t.getChild('series');
-  if (!seriesColumn) throw new Error('Query result is missing column "series".');
-  // buildTimeseriesSql orders by series, pixel_id, date. Find each contiguous
-  // series block instead of decoding up to two million repeated UTF-8 strings
-  // on the main thread. The numeric output is still one entry per source row.
-  for (let start = 0; start < t.numRows;) {
-    const name = String(seriesColumn.get(start));
-    let low = start + 1, high = t.numRows;
-    while (low < high) {
-      const mid = Math.floor((low + high) / 2);
-      if (String(seriesColumn.get(mid)) === name) low = mid + 1;
-      else high = mid;
-    }
-    seriesIdx.fill(seriesNames.length, start, low);
-    seriesNames.push(name);
-    start = low;
-  }
-
-  const unique = new Set<number>();
-  for (const id of pixelId) unique.add(id);
-
-  return {
-    seriesNames,
-    pixelId,
-    seriesIdx,
-    time,
-    evi,
-    rows: pixelId.length,
-    pixelsLoaded: unique.size,
-  };
+  buildWhere(filters); // the same guards as the SQL path: pixel cap, ids, dates
+  const tables = await yearTables(manifest, filters.years, filters.series, opts);
+  return extractBundle(tables, filters.pixelIds, filters.dateRange, MAX_RESULT_ROWS);
 }
 
 export async function getDailySummary(
@@ -456,27 +455,9 @@ export async function getDailySummary(
   opts: QueryOptions = {},
 ): Promise<DailySummaryRow[]> {
   if (!manifest.timeseries) return [];
-  await registerSite(manifest);
-  const sql = buildDailySummarySql(tableRef(manifest.siteId, manifest.timeseries), filters);
-  const t = await streamQuery(sql, opts);
-  const dates = strCol(t, 'date');
-  const series = strCol(t, 'series');
-  const mean = col<ArrayLike<number>>(t, 'mean');
-  const q25 = col<ArrayLike<number>>(t, 'q25');
-  const q75 = col<ArrayLike<number>>(t, 'q75');
-  const n = col<ArrayLike<number>>(t, 'n');
-  const out: DailySummaryRow[] = new Array(dates.length);
-  for (let i = 0; i < dates.length; i++) {
-    out[i] = {
-      date: dates[i],
-      series: series[i],
-      mean: Number(mean[i]),
-      q25: Number(q25[i]),
-      q75: Number(q75[i]),
-      n: Number(n[i]),
-    };
-  }
-  return out;
+  buildWhere(filters);
+  const tables = await yearTables(manifest, filters.years, filters.series, opts);
+  return dailySummary(tables, filters.pixelIds, filters.dateRange);
 }
 
 export async function getPixelTrace(
@@ -487,29 +468,9 @@ export async function getPixelTrace(
   opts: QueryOptions = {},
 ): Promise<TimeseriesBundle> {
   if (!manifest.timeseries) throw new Error('This site has no `pixels_timeseries` table.');
-  await registerSite(manifest);
-  const sql = buildPixelTraceSql(
-    tableRef(manifest.siteId, manifest.timeseries),
-    pixelId,
-    years,
-    series,
-  );
-  const t = await streamQuery(sql, opts);
-  const ids = Int32Array.from(col<ArrayLike<number>>(t, 'pixel_id'));
-  const seriesVals = strCol(t, 'series');
-  const time = Float64Array.from(col<ArrayLike<number>>(t, 't'));
-  const evi = Float64Array.from(col<ArrayLike<number>>(t, 'evi'));
-  const seriesNames = [...new Set(seriesVals)];
-  const seriesIdx = Uint8Array.from(seriesVals, (s) => seriesNames.indexOf(s));
-  return {
-    seriesNames,
-    pixelId: ids,
-    seriesIdx,
-    time,
-    evi,
-    rows: ids.length,
-    pixelsLoaded: ids.length ? 1 : 0,
-  };
+  if (!Number.isInteger(pixelId)) throw new Error('Pixel id must be an integer.');
+  const tables = await yearTables(manifest, years, series, opts);
+  return extractBundle(tables, [pixelId], null, 20_000);
 }
 
 /** Mean EVI per pixel, for colouring the pixel cloud and the hexbin skyline. */
@@ -520,17 +481,7 @@ export async function getPixelMeans(
   opts: QueryOptions = {},
 ): Promise<Map<number, number>> {
   if (!manifest.timeseries) return new Map();
-  await registerSite(manifest);
-  opts.onProgress?.({ phase: 'Averaging EVI per pixel', fraction: null });
-  const t = await streamQuery(
-    buildPixelMeanSql(tableRef(manifest.siteId, manifest.timeseries), years, series),
-    opts,
-  );
-  const ids = col<ArrayLike<number>>(t, 'pixel_id');
-  const means = col<ArrayLike<number>>(t, 'mean_evi');
-  const out = new Map<number, number>();
-  for (let i = 0; i < ids.length; i++) out.set(Number(ids[i]), Number(means[i]));
-  return out;
+  return pixelMeans(await yearTables(manifest, years, series, opts));
 }
 
 /* -------------------------------------------------------------- polygons */
@@ -549,12 +500,8 @@ export async function pixelsInPolygon(
   ], { signal: opts.signal });
 }
 
-export function clearQueryCaches(siteId?: string): void {
-  if (!siteId) {
-    distinctCache.clear();
-    return;
-  }
-  for (const key of [...distinctCache.keys()]) {
-    if (key.startsWith(`${siteId}|`)) distinctCache.delete(key);
-  }
+/** Forget everything derived from a site's time series: year tables and facts. */
+export async function clearQueryCaches(siteId: string): Promise<void> {
+  await forgetYearTables(siteId);
+  await deleteCacheFile(factsKey(siteId));
 }

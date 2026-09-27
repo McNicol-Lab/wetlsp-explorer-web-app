@@ -1,11 +1,11 @@
-cff-version: 1.2.1
+cff-version: 1.2.0
 message: >-
   If you use WetLSP Explorer, please cite it as below. Please also cite the
   WetLSP method and data and credit the imagery provider; see "References and
   how to cite" in README.md.
 type: software
 title: WetLSP Explorer
-version: 1.2.1
+version: 1.2.2
 date-released: 2026-09-27
 license: MIT
 repository-code: https://github.com/bhagyeshsagole/wetlsp-explorer
