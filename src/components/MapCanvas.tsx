@@ -34,6 +34,12 @@ export interface MapCanvasProps {
   dark: boolean;
   layers: Layer[];
   initialBounds?: [number, number, number, number] | null;
+  /**
+   * What `initialBounds` belong to, e.g. the site id. The map fits the bounds
+   * once per key, so switching sites re-frames the new site while pans and
+   * zooms within one site are left alone.
+   */
+  fitKey?: string;
   initialViewState?: { longitude: number; latitude: number; zoom: number };
   interactive?: boolean;
   pitch?: number;
@@ -50,6 +56,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     dark,
     layers,
     initialBounds,
+    fitKey = '',
     initialViewState,
     interactive = true,
     pitch = 0,
@@ -64,7 +71,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const overlayRef = useRef<MapLibreOverlay | null>(null);
-  const didFit = useRef(false);
+  /** The fitKey last fitted, or null before the first fit on this map. */
+  const didFit = useRef<string | null>(null);
   // Bumped whenever a map instance is created, so the fit effect re-runs after
   // a remount (React StrictMode mounts, unmounts and mounts again in dev).
   const [mapEpoch, setMapEpoch] = useState(0);
@@ -100,7 +108,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // Create the map once; style, layers and bounds are patched in later effects.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    didFit.current = false;
+    didFit.current = null;
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: basemapStyle(basemap, dark),
@@ -169,7 +177,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       map.remove();
       mapRef.current = null;
       overlayRef.current = null;
-      didFit.current = false;
+      didFit.current = null;
     };
     // Intentionally one-shot: subsequent prop changes are handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,18 +207,20 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !initialBounds || didFit.current) return;
+    if (!map || !initialBounds || didFit.current === fitKey) return;
     const [w, s, e, n] = initialBounds;
     if (![w, s, e, n].every(Number.isFinite) || (w === e && s === n)) return;
-    didFit.current = true;
+    const first = didFit.current === null;
+    didFit.current = fitKey;
     map.fitBounds(
       [
         [w, s],
         [e, n],
       ] as LngLatBoundsLike,
-      { padding: 56, duration: 0, maxZoom: 17 },
+      // Instant on first load; a short move when switching sites.
+      { padding: 56, duration: first ? 0 : 450, maxZoom: 17, pitch: map.getPitch() },
     );
-  }, [initialBounds, mapEpoch]);
+  }, [initialBounds, fitKey, mapEpoch]);
 
   return (
     <div className={className ?? 'relative h-full w-full'}>

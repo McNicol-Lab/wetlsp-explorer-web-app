@@ -317,6 +317,7 @@ export function PixelMapView() {
       dark={dark}
       layers={layers}
       initialBounds={bounds}
+      fitKey={site.manifest.siteId}
       pitch={mode3d ? 50 : 0}
       onMapReady={setMap}
       onClick={onPick}
