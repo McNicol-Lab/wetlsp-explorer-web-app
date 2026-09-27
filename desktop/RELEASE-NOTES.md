@@ -1,3 +1,7 @@
+**New in v1.2.6: updated credits and documentation.** The app is credited to
+Bhagyesh Sagole and Pawan Kumar, in the installer's copyright line and in the
+citation. The README and setup guide are reworded for clarity.
+
 **New in v1.2.5: plainer wording.** Labels, help text and messages across
 the app are rewritten in plain sentences. Nothing else changes.
 
