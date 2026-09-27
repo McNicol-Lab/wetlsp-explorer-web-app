@@ -1,3 +1,7 @@
+**Fixed in v1.2.4: the Pixel Map follows the site you pick.** Switching
+sites now moves the map to the new site, in both *Pixels* and *Skyline*,
+instead of staying where the previous site was.
+
 **New in v1.2.3: a coloured pixel map.** The Pixel Map now opens with each
 pixel coloured by its mean EVI for the selected year, with a legend. Switch it
 off with *Mean EVI* in the map toolbar.
