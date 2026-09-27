@@ -1,7 +1,7 @@
 {
   "name": "wetlsp-explorer",
   "private": true,
-  "version": "1.2.3",
+  "version": "1.2.4",
   "type": "module",
   "description": "Explore Wetland Land Surface Phenology datasets locally on macOS and Windows.",
   "scripts": {
