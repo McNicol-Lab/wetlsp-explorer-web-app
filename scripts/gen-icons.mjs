@@ -2,7 +2,7 @@
  * Generates the PWA icon set as real PNGs with no image dependencies.
  *
  * Mark: a rounded square in the app's teal->indigo gradient, three stacked
- * "wetland" sine bands in lighter tints, and a pale sun disc — the greenness
+ * "wetland" sine bands in lighter tints, and a pale sun disc: the greenness
  * curve over water, which is what the app plots.
  */
 import { deflateSync } from 'node:zlib';

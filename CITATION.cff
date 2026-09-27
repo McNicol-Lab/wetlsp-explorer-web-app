@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: >-
-  If you use WetLSP Explorer, please cite it as below. Please also cite the
-  WetLSP method and data and credit the imagery provider; see "References and
-  how to cite" in README.md.
+  If you use WetLSP Explorer, please cite it as below. Also cite the WetLSP
+  method and data and credit the imagery provider, as described under
+  "References and how to cite" in README.md.
 type: software
 title: WetLSP Explorer
 version: 1.2.5
@@ -12,9 +12,8 @@ repository-code: https://github.com/bhagyeshsagole/wetlsp-explorer
 authors:
   - family-names: Sagole
     given-names: Bhagyesh
-  - family-names: McNicol
-    given-names: Gavin
-    affiliation: University of Illinois Chicago
+  - family-names: Kumar
+    given-names: Pawan
 references:
   - type: article
     authors:

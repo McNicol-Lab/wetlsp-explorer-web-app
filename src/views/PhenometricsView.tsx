@@ -2,7 +2,7 @@
  * Phenometrics: the NetCDF layer browser and the raster visualiser.
  *
  * One to four site-years render side by side on a shared colour scale, in three
- * modes — plain figure, georeferenced on a basemap, and 3D relief.
+ * modes: plain figure, georeferenced on a basemap, and 3D relief.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BitmapLayer } from '@deck.gl/layers';

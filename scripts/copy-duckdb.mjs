@@ -16,7 +16,7 @@ const dest = resolve(here, '../public/duckdb');
  * `eh` is what every browser that can run this app actually selects; `mvp` is
  * the fallback for engines without WASM exception handling. The `coi` (threaded)
  * bundle is another 34 MB and only usable when the page is cross-origin
- * isolated, which a plain static host is not — set WETLSP_DUCKDB_COI=1 to ship
+ * isolated, which a plain static host is not. Set WETLSP_DUCKDB_COI=1 to ship
  * it alongside COOP/COEP headers.
  */
 const files = [
@@ -30,7 +30,7 @@ const files = [
 ];
 
 if (!existsSync(src)) {
-  console.error('copy-duckdb: @duckdb/duckdb-wasm is not installed — run npm install first.');
+  console.error('copy-duckdb: @duckdb/duckdb-wasm is not installed. Run npm install first.');
   process.exit(1);
 }
 mkdirSync(dest, { recursive: true });

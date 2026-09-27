@@ -3,7 +3,7 @@
  * NetCDF-4 reader.
  *
  * WetLSP annual files are NetCDF-4, i.e. HDF5 containers (magic `\x89HDF`), so
- * `netcdfjs` cannot read them — this worker uses h5wasm. It reads OPFS directly,
+ * `netcdfjs` cannot read them; this worker uses h5wasm. It reads OPFS directly,
  * so a 50 MB raster never crosses a postMessage boundary as a whole file.
  */
 import * as h5wasm from 'h5wasm';

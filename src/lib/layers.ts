@@ -195,8 +195,8 @@ export function baseLayerName(layer: string): string {
 
 /**
  * Port of `phenometric_scale_type()`. Unknown layers fall back to the
- * sequential count family rather than throwing — a site may ship extra
- * variables and the app must degrade, not crash.
+ * sequential count family instead of throwing: a site may ship extra
+ * variables, and the app should keep working instead of crashing.
  */
 export function phenometricScaleType(layer: string): ScaleFamily {
   const base = baseLayerName(layer);

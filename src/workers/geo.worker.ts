@@ -56,8 +56,8 @@ const handlers = {
   },
 
   /**
-   * Every pixel inside a polygon. A bounding-box prefilter runs first — the
-   * Shiny guard — so a lasso over 14k pixels never costs 14k ray casts. The
+   * Every pixel inside a polygon. A bounding-box prefilter runs first (the
+   * Shiny app's guard), so a lasso over 14k pixels never costs 14k ray casts. The
    * caller draws a random sample when there are more than it can plot.
    */
   async pixelsInPolygon(

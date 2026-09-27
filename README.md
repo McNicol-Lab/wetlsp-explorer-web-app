@@ -3,7 +3,7 @@
 Explore wetland vegetation through the seasons. Open a WetLSP site folder to
 view EVI time series, select pixels on a map, and compare annual phenology.
 
-A desktop app for **Mac** and **Windows**. Your data stays on your computer.
+A desktop app for Mac and Windows. Your data stays on your computer.
 
 | I want to… | Go to |
 | --- | --- |
@@ -12,8 +12,6 @@ A desktop app for **Mac** and **Windows**. Your data stays on your computer.
 | Fix a problem | [Troubleshooting](SETUP.md#if-something-goes-wrong) |
 | See what the app does | [The five views](#the-five-views) · [Video walkthrough](#video-walkthrough) |
 | Cite the app or its data | [References and how to cite](#references-and-how-to-cite) · [Data sources](#data-sources-and-attribution) |
-
----
 
 ## Download
 
@@ -29,7 +27,7 @@ Open **Assets** on that page and pick the file for your computer:
 
 Not sure which Mac you have? **Apple menu → About This Mac**.
 
-Skip the **Source code** archives — those are for developers, not installation.
+Skip the **Source code** archives. They are for developers and do not install the app.
 
 <details>
 <summary><strong>The download page shows 404</strong></summary>
@@ -42,21 +40,19 @@ GitHub account to use a file someone shares with you.
 <details>
 <summary><strong>My computer warns me not to open it</strong></summary>
 
-Expected — these lab builds are not signed with a paid Apple or Microsoft
-certificate. You confirm once, then it never asks again.
+This is expected. These lab builds are not signed with a paid Apple or
+Microsoft certificate, so you confirm once and it does not ask again.
 
 **Mac:** double-click the app, click **Done** on the warning, then go to
 **System Settings → Privacy & Security → Open Anyway** and confirm **Open**.
 **Windows:** **More info → Run anyway**.
 
 If a Mac instead says the app is **damaged**, you have a release older than
-v1.0.3 — download the latest one.
+v1.0.3. Download the latest one.
 
 Only do this for installers from this repository or your lab.
 [Full details in SETUP.md](SETUP.md).
 </details>
-
----
 
 ## Open your first site
 
@@ -75,8 +71,6 @@ your own data:
 You can also drag folders or `.zip` files onto the window, or pick individual
 files. Both single-file and batched `_ds` datasets work.
 
----
-
 ## The five views
 
 | View | Use it to |
@@ -87,14 +81,12 @@ files. Both single-file and batched `_ds` datasets work.
 | **Phenometrics** | Examine timing, greenness, and quality layers; compare up to four site-years. |
 | **Catalog** | Search the bundled 95-site catalog and export site information. |
 
----
-
 ## Your data
 
 Everything is processed and stored on your own computer. Nothing is uploaded.
 
 The installer bundles the app, the site catalog, and the scientific readers, so
-you can import and analyze local files **without internet** — including on first
+you can import and analyze local files **without internet**, even on first
 launch. Only basemap imagery needs a connection.
 
 Keep your original dataset folders as your permanent copy. Imported sites and
@@ -113,27 +105,21 @@ the clipboard for slides or chat. Shortcuts: **⌘S** / **Ctrl+S** saves, and
 and sample size. The **⋯** menu adds a vector SVG, a 1920×1080 slide PNG, CSVs,
 and a ready-to-paste figure caption that describes exactly what is plotted.
 
----
-
 ## Updates
 
 Manual for now: close the app, download the new installer from
 [Releases](https://github.com/bhagyeshsagole/wetlsp-explorer/releases/latest),
 and install it over your existing copy. [Details](SETUP.md#updates-and-saved-data).
 
----
-
 ## Video walkthrough
 
-See WetLSP Explorer in action: **Gavin's WetLSP** (YouTube).
+A video walkthrough of the app: **Gavin's WetLSP** (YouTube).
 
 <a href="https://youtu.be/ggAGSodHSn0">
   <img src="https://img.youtube.com/vi/ggAGSodHSn0/maxresdefault.jpg" alt="Gavin's WetLSP: video walkthrough of WetLSP Explorer (click to play on YouTube)" width="720">
 </a>
 
 [▶ Watch on YouTube](https://youtu.be/ggAGSodHSn0)
-
----
 
 ## Data sources and attribution
 
@@ -177,8 +163,6 @@ WetLSP Explorer is a viewer. It does not include or process satellite imagery.
 - **Basemaps.** Map backgrounds are loaded at runtime from OpenFreeMap
   (OpenStreetMap data) and Esri World Imagery, with attribution shown on the
   map. They are not PlanetScope imagery.
-
----
 
 ## References and how to cite
 
@@ -227,10 +211,8 @@ method, the data, and the imagery provider, and acknowledge the ecoϕlab.
 
 **This app**
 
-- Sagole, B., & McNicol, G. (2026). *WetLSP Explorer* (Version 1.2.5)
+- Sagole, B., & Kumar, P. (2026). *WetLSP Explorer* (Version 1.2.5)
   [Computer software]. <https://github.com/bhagyeshsagole/wetlsp-explorer>
-
----
 
 ## Acknowledgments
 
@@ -246,8 +228,6 @@ We thank the flux tower site teams and networks (AmeriFlux, FLUXNET /
 FLUXNET-CH4, and European flux networks) whose sites anchor the WetLSP
 catalog, and Planet Labs PBC and the NASA CSDA Program for the PlanetScope
 imagery.
-
----
 
 ## License
 

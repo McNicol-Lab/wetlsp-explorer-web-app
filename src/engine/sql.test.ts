@@ -1,7 +1,7 @@
 /**
- * The guardrail tests. `pixels_timeseries` is 28 M rows for one site, so the
- * important property is not that these queries are fast — it is that no code
- * path can produce one without a year, a series and a bounded pixel list.
+ * The guardrail tests. `pixels_timeseries` is 28 M rows for one site, so these
+ * check that no code path can build a query without a year, a series and a
+ * bounded pixel list.
  */
 import { describe, expect, it } from 'vitest';
 import {

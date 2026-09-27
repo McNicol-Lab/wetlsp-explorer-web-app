@@ -29,9 +29,9 @@ you the installer file. Do not download **Source code**: that is for developers.
 4. Eject the installer disk when you are done. You can delete the downloaded DMG.
 5. To keep the app handy, right-click its Dock icon → **Options → Keep in Dock**.
 
-**First launch shows a warning — this is expected.** These lab builds are signed,
-but not with a paid Apple Developer certificate, so macOS asks you to confirm the
-first time only:
+**The first launch shows a warning.** That is expected: these lab builds are
+signed, but not with a paid Apple Developer certificate, so macOS asks you to
+confirm the first time only.
 
 1. Double-click the app. macOS says **"Apple could not verify WetLSP Explorer is
    free of malware."** Click **Done**. Do not click Move to Trash.
@@ -50,7 +50,7 @@ managed computer, contact your IT team; do not disable system security.
 2. The app installs for your account and opens automatically.
 3. Next time, open **WetLSP Explorer** from the Start menu or desktop shortcut.
 
-**First-launch warning:** These initial lab builds are unsigned. If Windows
+These lab builds are unsigned, so the first launch may show a warning. If Windows
 shows **Windows protected your PC**, select **More info**, check that this is the
 WetLSP installer you downloaded, then select **Run anyway**. Your institution
 may require IT approval. An administrator password is normally not needed.

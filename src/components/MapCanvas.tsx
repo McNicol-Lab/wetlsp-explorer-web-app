@@ -3,7 +3,7 @@
  *
  * Uses `MapLibreOverlay` rather than `@deck.gl/mapbox`'s `MapboxOverlay`: the
  * latter targets Mapbox GL JS, and its interleaved path does not drive
- * MapLibre v5's renderer — layers silently never draw.
+ * MapLibre v5's renderer, so its layers silently never draw.
  *
  * deck runs interleaved, so both draw into one WebGL canvas: layers respect the
  * map's depth buffer, and a PNG export is a single `toDataURL`.
@@ -84,7 +84,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   useImperativeHandle(ref, () => ({
     map: () => mapRef.current,
     // In interleaved mode this is the basemap canvas, which already holds the
-    // deck layers — so one canvas is the whole picture.
+    // deck layers, so one canvas is the whole picture.
     canvas: () => overlayRef.current?.getCanvas() ?? mapRef.current?.getCanvas() ?? null,
     repaint: () => {
       mapRef.current?.triggerRepaint();

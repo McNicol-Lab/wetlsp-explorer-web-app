@@ -1,6 +1,6 @@
 /**
  * Dataset detection: given the files a user dropped in, work out which site they
- * belong to and which logical tables they form — with zero configuration.
+ * belong to and which logical tables they form, with no configuration.
  *
  * Filenames in the real exports mix `_` and `-` separators
  * (`CA_DB2_pixels_geom.parquet` next to `CA-DB2-wetlsp-2021.nc`), so every match
@@ -50,7 +50,7 @@ export function stripCommonRoot(files: InputFile[]): InputFile[] {
   let prefix = 0;
   outer: for (;;) {
     const seg = split[0][prefix];
-    // Never strip the final segment — that is the filename.
+    // Never strip the final segment: that is the filename.
     if (seg === undefined || prefix >= split[0].length - 1) break;
     for (const parts of split) {
       if (parts.length - 1 <= prefix || parts[prefix] !== seg) break outer;
@@ -154,7 +154,7 @@ function makeTable(
 
 /**
  * Classify a flat list of files into a site manifest skeleton. Pure and
- * synchronous — `ingest.ts` layers the async parts (reading meta, writing OPFS)
+ * synchronous; `ingest.ts` adds the async parts (reading meta, writing OPFS)
  * on top.
  */
 export function detectDataset(rawFiles: InputFile[], folderHint?: string): DetectionResult {
@@ -307,7 +307,7 @@ export function detectDataset(rawFiles: InputFile[], folderHint?: string): Detec
     warnings.push(`More than one NetCDF for ${y}; the largest file was kept.`);
   }
 
-  // Keep one NetCDF per year — the largest, which is the complete export.
+  // Keep one NetCDF per year: the largest, which is the complete export.
   const byYear = new Map<number, NetcdfFile>();
   for (const n of netcdf) {
     const prev = byYear.get(n.year);
@@ -384,7 +384,7 @@ export interface SiteGroup<T extends InputFile> {
 /**
  * Split a folder that holds several sites (a parent folder, a drop of five
  * zips) into one group per site. A folder that holds one site comes back as a
- * single group, untouched — exactly what the importer always did.
+ * single group, untouched, as the importer always handled it.
  *
  * Sites whose files are spread across sibling folders or several archive parts
  * (Drive's `-1-001.zip`, `-1-002.zip`) are merged back together by site id,

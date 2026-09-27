@@ -1,4 +1,4 @@
-/** RFC4180-ish CSV reader/writer — enough for site catalogs and data exports. */
+/** A small RFC 4180 CSV reader and writer, enough for site catalogs and data exports. */
 
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];

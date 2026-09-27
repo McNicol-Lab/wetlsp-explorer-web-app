@@ -16,7 +16,7 @@ export interface CrsResolution {
   /** proj4 definition string (or the WKT itself when that is what worked). */
   def: string;
   epsg: number | null;
-  /** Which branch produced `def` — surfaced in the UI so surprises are visible. */
+  /** Which branch produced `def`. The UI shows it, so a surprising choice is visible. */
   source: 'epsg' | 'wkt' | 'tmerc-params';
   name: string | null;
 }

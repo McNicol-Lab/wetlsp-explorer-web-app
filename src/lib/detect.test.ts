@@ -77,7 +77,7 @@ describe('name parsing', () => {
   });
 });
 
-describe('detectDataset — single-file layout', () => {
+describe('detectDataset: single-file layout', () => {
   const d = detectDataset(singleFileSite);
 
   it('prefers the NetCDF spelling of the site id', () => {
@@ -103,7 +103,7 @@ describe('detectDataset — single-file layout', () => {
   });
 });
 
-describe('detectDataset — batched `_ds` layout', () => {
+describe('detectDataset: batched `_ds` layout', () => {
   const d = detectDataset(batchedSite);
 
   it('treats each `_ds` directory as one logical table', () => {
@@ -126,7 +126,7 @@ describe('detectDataset — batched `_ds` layout', () => {
   });
 });
 
-describe('detectDataset — partial and messy input', () => {
+describe('detectDataset: partial and messy input', () => {
   it('ingests what is there and names what is missing', () => {
     const d = detectDataset([
       { path: 'CA-DB2/CA_DB2_pixels_timeseries.parquet', size: 10 },

@@ -2,8 +2,8 @@
  * The flagship "delight" view: the phenometric raster as an extruded relief,
  * GitHub-skyline style, with orbit controls.
  *
- * One column per finite cell, in a cartesian OrbitView — no basemap, no
- * projection, just the surface. The Phenometrics grid mounts one per panel.
+ * One column per finite cell, in a cartesian OrbitView with no basemap and no
+ * projection, only the surface. The Phenometrics grid mounts one per panel.
  */
 import { useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import DeckGL from '@deck.gl/react';

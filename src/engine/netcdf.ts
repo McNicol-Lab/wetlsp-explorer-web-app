@@ -36,7 +36,7 @@ export function getNetcdfInfo(
   const entry = fileFor(manifest, year);
   // Deliberately NOT cancellable. The promise is cached and handed to every
   // consumer, so honouring one caller's AbortSignal would reject it for all of
-  // them — including components that are still waiting. Opening a file is
+  // them, including components that are still waiting. Opening a file is
   // bounded work and the result is reused, so there is nothing to gain.
   const promise = client
     .call<NetcdfInfo>('info', [manifest.siteId, entry.path, year], {
@@ -76,7 +76,7 @@ export async function releaseSite(siteId: string): Promise<void> {
   }
 }
 
-/** Layers present in every one of the given site-years — the comparison set. */
+/** Layers present in every one of the given site-years: the comparison set. */
 export function intersectLayers(infos: NetcdfInfo[]): string[] {
   if (infos.length === 0) return [];
   let shared = new Set(infos[0].variables.map((v) => v.name));

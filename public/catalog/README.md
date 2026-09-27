@@ -13,12 +13,12 @@ To update the bundled catalog:
 npm run catalog:import -- /path/to/wetlsp_cyverse_site_catalog_final.csv
 ```
 
-That validates the file, reports how many sites and how many have coordinates,
-and copies it into place. Rebuild and the world map is populated.
+That checks the file, reports how many sites it has and how many have
+coordinates, and copies it into place. Rebuild the app to see them on the world map.
 
-Users can also load a catalog at runtime — **Settings → Site catalog → Load
-catalog file** accepts the same CSV (or a JSON array of the same fields) and it
-overrides the bundled copy for that browser.
+Users can also load a catalog while the app runs. **Settings → Site catalog →
+Load catalog file** accepts the same CSV (or a JSON array of the same fields),
+and it replaces the bundled copy on that computer.
 
 ## Columns
 

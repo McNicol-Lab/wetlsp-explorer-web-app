@@ -70,7 +70,7 @@ export function pluralise(n: number, one: string, many = `${one}s`): string {
   return `${formatCount(n)} ${n === 1 ? one : many}`;
 }
 
-/** "3 minutes ago" — used for the left rail's import timestamps. */
+/** "3 minutes ago", for the left rail's import timestamps. */
 export function relativeTime(ts: number): string {
   const delta = Date.now() - ts;
   const mins = Math.round(delta / 60_000);

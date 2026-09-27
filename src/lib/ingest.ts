@@ -1,9 +1,9 @@
 /**
  * Turning whatever the user dropped in into a persisted, queryable site.
  *
- * Handles every input route — drag-and-drop of a folder, `webkitdirectory`
- * pickers, plain multi-file selection, `.zip` archives and the sample sites
- * bundled with the desktop app — and normalises all of them into the same
+ * Handles every input route (drag-and-drop of a folder, `webkitdirectory`
+ * pickers, plain multi-file selection, `.zip` archives and the downloaded
+ * sample sites) and normalises all of them into the same
  * `{ path, size, open }` list before detection runs.
  */
 import {

@@ -9,7 +9,7 @@ import {
   tmercDefFromWkt,
 } from './crs';
 
-/** WKT2 as GDAL writes it for EPSG:32610 — the CRS CA-DB2 ships. */
+/** WKT2 as GDAL writes it for EPSG:32610, the CRS CA-DB2 ships with. */
 const WKT2_UTM10N = `PROJCRS["WGS 84 / UTM zone 10N",
   BASEGEOGCRS["WGS 84",
     DATUM["World Geodetic System 1984",

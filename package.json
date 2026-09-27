@@ -74,6 +74,6 @@
     "workbox-strategies": "^7.4.1"
   },
   "main": "desktop/main.mjs",
-  "author": "Bhagyesh Sagole and Gavin McNicol",
+  "author": "Bhagyesh Sagole and Pawan Kumar",
   "license": "MIT"
 }
