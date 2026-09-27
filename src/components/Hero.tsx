@@ -43,7 +43,7 @@ export function Hero() {
             <p className="mb-5 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--accent)]">Wetland land surface phenology</p>
             <h1 className="max-w-[540px] text-[clamp(2.8rem,4.7vw,4.4rem)] font-normal leading-[1.04] tracking-[-0.05em]">Explore wetland phenology</h1>
             <p className="mt-6 max-w-[40ch] text-[16px] leading-[1.7] text-[var(--text-muted)]">
-              Follow seasonal change, from individual pixels to the wetland landscape.
+              See how wetland greenness rises and falls through the year, pixel by pixel.
               Open a site to explore its time series and phenometric maps.
             </p>
             {catalogCount > 0 && (
@@ -105,8 +105,8 @@ export function Hero() {
         </div>
       </main>
       <footer className="mx-auto flex w-full max-w-[1240px] shrink-0 items-center justify-between gap-4 px-8 py-7 text-[11px] text-[var(--text-muted)]">
-        <span>Pixel time series · Phenometric maps · Site catalog</span>
-        {!online && <span className="inline-flex items-center gap-1.5"><WifiOff size={12} />Offline — local datasets still work</span>}
+        <span>Pixel time series, phenometric maps and a site catalog</span>
+        {!online && <span className="inline-flex items-center gap-1.5"><WifiOff size={12} />You're offline. Imported sites still work.</span>}
       </footer>
     </div>
   );

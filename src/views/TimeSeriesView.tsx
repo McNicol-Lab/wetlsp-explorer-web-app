@@ -289,7 +289,7 @@ export function TimeSeriesView() {
         subtitle: `${siteName ? `${siteName} · ` : ''}daily mean per year · ${sample}`,
         caption:
           `Daily mean ${seriesLabel} EVI at ${place}, one line per year (${d.years.join(', ')}), ` +
-          `plotted on a shared January–December axis. Each line averages the same ${sample}. ` +
+          `plotted on a shared January to December axis. Each line averages the same ${sample}. ` +
           'Source: WetLSP pixels_timeseries.',
       };
     }
@@ -729,7 +729,7 @@ function StatusFooter({
       <span className="truncate">{parts.join(' · ') || 'Nothing loaded yet'}</span>
       {sampled && (
         <span className="shrink-0 text-[var(--text-faint)]">
-          showing a random sample — draw a new one or raise Max pixels in the inspector
+          Random sample. Draw a new one or raise Max pixels in the inspector.
         </span>
       )}
       {state.error && state.data && (
@@ -1075,28 +1075,17 @@ export function TimeSeriesInspector() {
 
       <Card title="How to read it">
         <ul className="space-y-1.5 text-[12px] leading-snug text-[var(--text-muted)]">
+          <li>The bold line is the daily mean.</li>
+          <li>The shaded band is the interquartile range across the plotted pixels, for each day.</li>
           <li>
-            <span className="font-medium text-[var(--text)]">Bold line</span> — the daily mean.
+            Turn on Pixels to draw every sampled pixel as a thin line. Select 12 or fewer pixels on
+            the map to get one labelled line each.
           </li>
           <li>
-            <span className="font-medium text-[var(--text)]">Shaded band</span> — the interquartile
-            range across the plotted pixels, per day.
+            Key dates mark the peak and where the mean crosses half its seasonal amplitude. They are
+            a quick reading of the line; the Phenometrics layers hold the reference values.
           </li>
-          <li>
-            <span className="font-medium text-[var(--text)]">Pixels</span> — turn on to draw every
-            sampled pixel as a thin line. Select 12 or fewer pixels on the map to get one labelled
-            line each.
-          </li>
-          <li>
-            <span className="font-medium text-[var(--text)]">Key dates</span> — where the mean
-            crosses half its seasonal amplitude, and its peak. A quick reading of the line; the
-            Phenometrics layers are the reference values.
-          </li>
-          <li>
-            <span className="font-medium text-[var(--text)]">spline</span> is gap-filled daily;{' '}
-            <span className="font-medium text-[var(--text)]">raw</span> is the observed, sparser
-            record.
-          </li>
+          <li>spline is gap-filled daily EVI; raw is the observed, sparser record.</li>
         </ul>
       </Card>
     </div>

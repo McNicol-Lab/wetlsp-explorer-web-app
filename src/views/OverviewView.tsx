@@ -48,7 +48,7 @@ function useMapSites(): MapSite[] {
         lon: c.lon,
         lat: c.lat,
         loaded: loadedNorm.has(norm(c.site_id)),
-        label: c.site_name ? `${c.site_id} — ${c.site_name}` : c.site_id,
+        label: c.site_name ? `${c.site_id} · ${c.site_name}` : c.site_id,
       });
     }
 
@@ -201,7 +201,7 @@ export function OverviewView() {
         const s = info.object as MapSite | undefined;
         if (!s) return null;
         return `<b>${s.label}</b><br/>${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}${
-          s.loaded ? '<br/><span style="opacity:.7">Loaded — click to open</span>' : '<br/><span style="opacity:.7">In catalog only</span>'
+          s.loaded ? '<br/><span style="opacity:.7">Imported. Click to open.</span>' : '<br/><span style="opacity:.7">In catalog only</span>'
         }`;
       }}
       className="relative h-full w-full card overflow-hidden"
@@ -253,7 +253,7 @@ export function OverviewInspector() {
   return (
     <div className="space-y-3">
       <Card
-        title={record?.site_name ? `${id} — ${record.site_name}` : id}
+        title={record?.site_name ? `${id} · ${record.site_name}` : id}
         subtitle={state?.status === 'ready' ? 'Loaded and ready' : state ? 'Dataset imported' : 'Catalog record · data not imported'}
         actions={
           state ? (
@@ -275,7 +275,7 @@ export function OverviewInspector() {
             ? 'Explore seasonal vegetation greenness across the site, then compare when growth begins, peaks and declines.'
             : 'Explore pixel-level vegetation greenness and annual phenology when site data are imported.'}
         </p>
-        {!state && <p className="mt-3 text-xs leading-relaxed text-[var(--text-muted)]">This summary uses catalog metadata. Import the site folder to confirm its spatial coverage, observation dates and available measurements.</p>}
+        {!state && <p className="mt-3 text-xs leading-relaxed text-[var(--text-muted)]">This summary comes from the catalog. Import the site folder to see its actual coverage and dates.</p>}
       </Card>
 
       <DatasetSummary state={state} record={record} />
@@ -413,7 +413,7 @@ function DatasetSummary({ state, record }: { state: SiteState | null; record?: C
         <div>
           <h3 className="mb-1 text-[12.5px] font-medium">Annual phenology</h3>
           <p className={paragraph}>{years.length
-            ? `${years.length} NetCDF ${years.length === 1 ? 'file' : 'files'}: ${years.join(', ')}. Inspect seasonal timing, greenness and quality layers; availability of a file does not imply every cell has a valid estimate.`
+            ? `${years.length} NetCDF ${years.length === 1 ? 'file' : 'files'}: ${years.join(', ')}. They hold seasonal timing, greenness and quality layers. Having a file for a year does not mean every cell has a valid estimate.`
             : 'No annual NetCDF files imported.'}</p>
         </div>
         <div>
@@ -422,7 +422,7 @@ function DatasetSummary({ state, record }: { state: SiteState | null; record?: C
             ? `${formatCount(facts.pixelCount)} pixel locations${state.meta.radius_m ? `; ${state.meta.radius_m} m extraction radius from the imported metadata` : ''}.`
             : 'Pixel coverage is not available from the imported files.'} {state.geometry ? 'Projected coordinates are transformed to WGS84 for the map.' : ''}</p>
         </div>
-        {!!facts?.timeseriesRows && <p className="border-t border-[var(--border)] pt-3 text-xs leading-relaxed text-[var(--text-muted)]">Rows count pixel–date–series records, not independent field measurements. Chart summaries describe the sampled or selected pixels; use raw observations and QA layers to assess support for a seasonal pattern.</p>}
+        {!!facts?.timeseriesRows && <p className="border-t border-[var(--border)] pt-3 text-xs leading-relaxed text-[var(--text-muted)]">Each row is one pixel on one date in one series, not a separate field measurement. Chart summaries describe only the sampled or selected pixels, so check the QA layers (and raw observations, where a site has them) before reading much into a seasonal pattern.</p>}
       </div>
     </Card>
   );

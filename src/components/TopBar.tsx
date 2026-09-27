@@ -84,7 +84,7 @@ export function TopBar() {
           </Chip>
         )}
         {!online && (
-          <Chip tone="warning" title="No network. Loaded datasets remain fully usable.">
+          <Chip tone="warning" title="You're offline. Imported sites still work.">
             <WifiOff size={11} /> Offline
           </Chip>
         )}

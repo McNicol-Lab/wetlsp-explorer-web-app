@@ -191,7 +191,7 @@ export function PhenometricsView() {
     });
     const pooled = data[0].slice!.downsample > 1 ? `, mean-pooled ${data[0].slice!.downsample}× for display` : '';
     return (
-      `WetLSP ${displayedLayer} — ${info.description.replace(/\.$/, '')} — for ${where.join(', ')}` +
+      `WetLSP ${displayedLayer} (${info.description.replace(/\.$/, '')}) for ${where.join(', ')}` +
       `${data.length > 1 ? (ph.syncScale ? ', on a shared colour scale' : ', each on its own colour scale') : ''}${pooled}. ` +
       `Source: WetLSP NetCDF ${[...new Set(data.map((p) => p.year))].join(', ')}.`
     );
@@ -418,7 +418,7 @@ function Panel({
     <div className="relative min-h-0 overflow-hidden rounded-[11px] border border-[var(--border)] bg-[var(--bg-sunken)]">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-2">
         <span className="chip pointer-events-auto bg-[var(--bg-elevated)] font-medium text-[var(--text)]">
-          {panel.siteId} — {panel.year}
+          {panel.siteId} · {panel.year}
         </span>
         {onRemove && (
           <button

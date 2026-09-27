@@ -273,7 +273,7 @@ export function CatalogInspector() {
           source === 'user'
             ? 'Loaded from a file you supplied'
             : source === 'bundled'
-              ? 'Bundled with the app — available offline'
+              ? 'Bundled with the app and available offline'
               : 'None loaded'
         }
         actions={

@@ -234,7 +234,7 @@ function FileChips({ state }: { state: SiteState }) {
       label: 'geom',
       title: manifest.geom
         ? `${manifest.geom.parts.length} file(s) · ${formatBytes(manifest.geom.totalBytes)}`
-        : 'pixels_geom is missing — pixels cannot be mapped',
+        : 'pixels_geom is missing, so pixels cannot be mapped',
     },
     {
       ok: Boolean(manifest.meta),
@@ -242,7 +242,7 @@ function FileChips({ state }: { state: SiteState }) {
       label: 'meta',
       title: manifest.meta
         ? `${manifest.meta.parts.length} file(s) · CRS and site metadata`
-        : 'pixels_meta is missing — no CRS available',
+        : 'pixels_meta is missing, so there is no CRS',
     },
     {
       ok: Boolean(manifest.timeseries),
@@ -250,7 +250,7 @@ function FileChips({ state }: { state: SiteState }) {
       label: 'timeseries',
       title: manifest.timeseries
         ? `${manifest.timeseries.parts.length} file(s) · ${formatBytes(manifest.timeseries.totalBytes)}`
-        : 'pixels_timeseries is missing — no EVI series',
+        : 'pixels_timeseries is missing, so there is no EVI series',
     },
   ];
 

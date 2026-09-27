@@ -845,7 +845,7 @@ async function runImport(jobs: ImportJob[]): Promise<void> {
             title: `${manifest.siteId} imported`,
             detail: manifest.warnings.length
               ? manifest.warnings[0]
-              : `${fileCount} files ready — ${manifest.netcdf.length} NetCDF year${
+              : `${fileCount} files ready, with ${manifest.netcdf.length} NetCDF year${
                   manifest.netcdf.length === 1 ? '' : 's'
                 }.`,
           });

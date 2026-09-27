@@ -1,3 +1,6 @@
+**New in v1.2.5: plainer wording.** Labels, help text and messages across
+the app are rewritten in plain sentences. Nothing else changes.
+
 **Fixed in v1.2.4: the Pixel Map follows the site you pick.** Switching
 sites now moves the map to the new site, in both *Pixels* and *Skyline*,
 instead of staying where the previous site was.
