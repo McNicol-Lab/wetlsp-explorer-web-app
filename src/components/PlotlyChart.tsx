@@ -62,7 +62,9 @@ export const PlotlyChart = forwardRef<
       if (!el?.data || !el.layout || !plotly) throw new Error('The chart is not ready to export yet.');
       const width = opts.width ?? Math.max(900, el.clientWidth);
       const height = opts.height ?? Math.max(520, el.clientHeight);
-      const margin = (el.layout.margin as Record<string, number> | undefined) ?? {};
+      const onScreen = (el.layout.margin as Record<string, number> | undefined) ?? {};
+      // Exported images carry no toolbar, so drop the band reserved for it.
+      const margin = { ...onScreen, t: Math.max(0, (onScreen.t ?? MODEBAR_BAND) - MODEBAR_BAND) + 14 };
       const title = opts.title
         ? {
             text: `<b>${escapeHtml(opts.title)}</b>${
@@ -87,8 +89,8 @@ export const PlotlyChart = forwardRef<
         paper_bgcolor: opts.background ?? '#ffffff',
         plot_bgcolor: opts.background ?? '#ffffff',
         ...(title
-          ? { title, margin: { ...margin, t: (margin.t ?? 14) + (opts.subtitle ? 74 : 52) } }
-          : {}),
+          ? { title, margin: { ...margin, t: margin.t + (opts.subtitle ? 74 : 52) } }
+          : { margin }),
         legend: { ...((el.layout.legend as object) ?? {}), y: 1.02, yanchor: 'bottom' },
       };
       return plotly.toImage(
@@ -142,6 +144,9 @@ export async function dataUrlToBlob(url: string): Promise<Blob> {
   return (await fetch(url)).blob();
 }
 
+/** Height of Plotly's toolbar strip, reserved at the top of every chart. */
+export const MODEBAR_BAND = 44;
+
 /** Layout defaults shared by every chart, in the current theme's tokens. */
 export function plotTheme(dark: boolean): PlotLayout {
   const text = dark ? '#e8ecf2' : '#14181f';
@@ -151,7 +156,9 @@ export function plotTheme(dark: boolean): PlotLayout {
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
     font: { family: 'Inter, system-ui, sans-serif', size: 12, color: text },
-    margin: { l: 56, r: 18, t: 14, b: 44 },
+    // The top band holds the legend on the left and Plotly's toolbar on the
+    // right, so the toolbar never sits over the data.
+    margin: { l: 56, r: 18, t: MODEBAR_BAND, b: 44 },
     hoverlabel: {
       bgcolor: dark ? '#121821' : '#ffffff',
       bordercolor: grid,

@@ -74,6 +74,42 @@ export function parseNetcdfName(path: string): { siteId: string | null; year: nu
   return { siteId: siteId || null, year };
 }
 
+/** FLUXNET-style ids: two letters, a separator, three characters (`CA-SCB`, `US_BZF`). */
+export function looksLikeSiteId(s: string): boolean {
+  return /^[A-Za-z]{2}[-_][A-Za-z0-9]{3}$/.test(s);
+}
+
+/** One spelling per site: `CA_DSM` and `CA-DSM` are the same site. */
+export function distinctSiteIds(ids: string[]): string[] {
+  const seen = new Map<string, string>();
+  for (const id of ids) {
+    const key = normalise(id);
+    // Prefer the hyphenated spelling the data itself uses.
+    if (!seen.has(key) || (id.includes('-') && !seen.get(key)!.includes('-'))) seen.set(key, id);
+  }
+  return [...seen.values()];
+}
+
+/**
+ * A warning when `pixels_meta` names a different site than the files or the
+ * folder do, or null when they agree. The meta id is still used; this only
+ * makes a mislabelled download visible.
+ */
+export function siteIdMismatch(
+  metaSiteId: string,
+  named: { files: string[]; folder: string | null },
+): string | null {
+  const meta = normalise(metaSiteId);
+  const files = named.files.filter((id) => normalise(id) !== meta);
+  const folder = named.folder && normalise(named.folder) !== meta ? named.folder : null;
+  if (files.length === 0 && !folder) return null;
+  const where = [
+    files.length ? `the file names say ${files.join(', ')}` : '',
+    folder ? `the folder is named ${folder}` : '',
+  ].filter(Boolean).join(' and ');
+  return `pixels_meta names this site ${metaSiteId}, but ${where}. It was imported as ${metaSiteId}; check that the files belong to that site.`;
+}
+
 /** `CA_DB2_pixels_geom.parquet` -> `CA_DB2`. */
 export function siteIdFromTableName(path: string): string | null {
   const name = basename(path).replace(/\.parquet$/i, '');
@@ -87,6 +123,8 @@ export interface DetectionResult {
   siteId: string;
   /** Alternative spellings seen across filenames, for reporting. */
   siteIdCandidates: string[];
+  /** Site ids spelled out by the data file names, and by the folder. */
+  namedIds: { files: string[]; folder: string | null };
   layout: DatasetLayout;
   geom: StoredTable | null;
   meta: StoredTable | null;
@@ -123,6 +161,7 @@ export function detectDataset(rawFiles: InputFile[], folderHint?: string): Detec
   const files = stripCommonRoot(rawFiles.filter((f) => !basename(f.path).startsWith('.')));
   const warnings: string[] = [];
   const idVotes = new Map<string, number>();
+  const fileIds = new Set<string>();
   const vote = (id: string | null, weight: number) => {
     if (!id) return;
     idVotes.set(id, (idVotes.get(id) ?? 0) + weight);
@@ -145,6 +184,7 @@ export function detectDataset(rawFiles: InputFile[], folderHint?: string): Detec
     if (ext === 'nc' || ext === 'nc4' || ext === 'netcdf') {
       const { siteId, year } = parseNetcdfName(f.path);
       vote(siteId, 3);
+      if (siteId) fileIds.add(siteId);
       if (year === null) {
         warnings.push(`Could not read a year out of "${basename(f.path)}" — it was skipped.`);
         unrecognised.push(stored);
@@ -162,7 +202,9 @@ export function detectDataset(rawFiles: InputFile[], folderHint?: string): Detec
       }
       const nameMatch = TABLE_PATTERNS.find((p) => p.re.test(normBase));
       if (nameMatch) {
-        vote(siteIdFromTableName(f.path), 2);
+        const tableId = siteIdFromTableName(f.path);
+        vote(tableId, 2);
+        if (tableId) fileIds.add(tableId);
         (single[nameMatch.role] ??= []).push(stored);
         continue;
       }
@@ -213,17 +255,35 @@ export function detectDataset(rawFiles: InputFile[], folderHint?: string): Detec
             ? 'single-file'
             : 'unknown';
 
-  if (folderHint) vote(folderHint.replace(/\/+$/, '').split('/').pop() ?? null, 1);
+  const folderId = folderHint ? (folderHint.replace(/\/+$/, '').split('/').pop() ?? null) : null;
+  vote(folderId, 1);
 
-  let siteId = '';
+  // `CA_DSM` (parquet names) and `CA-DSM` (NetCDF names) are one site: pool
+  // their votes, then use the hyphenated spelling the data itself uses.
+  const pooled = new Map<string, number>();
+  for (const [id, score] of idVotes) pooled.set(normalise(id), (pooled.get(normalise(id)) ?? 0) + score);
+  let winner = '';
   let best = -1;
-  for (const [id, score] of idVotes) {
+  for (const [key, score] of pooled) {
     if (score > best) {
       best = score;
-      siteId = id;
+      winner = key;
     }
   }
+  const spellings = [...idVotes.keys()].filter((id) => normalise(id) === winner);
+  let siteId = spellings.find((id) => id.includes('-')) ?? spellings[0] ?? '';
   if (!siteId) siteId = 'Unknown site';
+
+  const namedIds = {
+    files: distinctSiteIds([...fileIds]),
+    folder: folderId && looksLikeSiteId(folderId) ? folderId : null,
+  };
+  const named = distinctSiteIds([...namedIds.files, ...(namedIds.folder ? [namedIds.folder] : [])]);
+  if (named.length > 1) {
+    warnings.push(
+      `The file and folder names refer to more than one site (${named.join(', ')}). It was imported as ${siteId}; check that these files belong together.`,
+    );
+  }
 
   // Warn about what is missing, naming the consequence rather than the file.
   if (!geom)
@@ -257,6 +317,7 @@ export function detectDataset(rawFiles: InputFile[], folderHint?: string): Detec
   return {
     siteId,
     siteIdCandidates: [...idVotes.keys()],
+    namedIds,
     layout,
     geom,
     meta,

@@ -10,8 +10,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import type { PlotData } from 'plotly.js-dist-min';
-import { Boxes, FileImage, LineChart, Presentation, RefreshCw, Table } from 'lucide-react';
+import { Boxes, FileImage, LineChart, Presentation, RefreshCw, Shuffle, Table } from 'lucide-react';
 import {
+  MODEBAR_BAND,
   PLOT_CONFIG,
   PlotlyChart,
   dataUrlToBlob,
@@ -33,6 +34,7 @@ import { DEFAULT_PIXEL_SAMPLE, MAX_PIXEL_SAMPLE } from '@/engine/sql';
 import { downloadBlob, downloadCsv, exportBackground, timestampedName } from '@/lib/export';
 import { copyImage } from '@/lib/figure';
 import { formatCount, isoFromMs } from '@/lib/format';
+import { newSeed } from '@/lib/sampling';
 import type { DailySummaryRow } from '@/lib/types';
 import { pixelLines, type PixelLine } from './timeseriesPlot';
 import { keyDates, type KeyDates } from './keyDates';
@@ -72,6 +74,7 @@ async function pixelIdsFor(
   useSelection: boolean,
   selection: number[],
   maxPixels: number,
+  seed: number,
   ctx: { signal: AbortSignal; onProgress: (p: import('@/lib/types').ProgressEvent) => void },
 ): Promise<{ ids: Int32Array; available: number }> {
   if (useSelection) {
@@ -82,7 +85,7 @@ async function pixelIdsFor(
     }
     return { ids: Int32Array.from(selection), available: selection.length };
   }
-  return samplePixelIds(manifest, years, series, maxPixels, ctx);
+  return samplePixelIds(manifest, years, series, maxPixels, { ...ctx, seed });
 }
 
 function useTimeseriesData() {
@@ -106,7 +109,7 @@ function useTimeseriesData() {
       if (!manifest || year === null) throw new Error('No site selected.');
       const years = [year];
       const { ids: pixelIds, available } = await pixelIdsFor(
-        manifest, years, ts.series, ts.useSelection, selection, ts.maxPixels, { signal, onProgress },
+        manifest, years, ts.series, ts.useSelection, selection, ts.maxPixels, ts.sampleSeed, { signal, onProgress },
       );
       if (pixelIds.length === 0) {
         throw new Error(`No pixels carry ${ts.series.join(' or ')} data for ${year}.`);
@@ -127,7 +130,7 @@ function useTimeseriesData() {
         usedSelection: ts.useSelection,
       };
     },
-    [manifest?.siteId, year, seriesKey, ts.maxPixels, selectionKey, rangeKey, ts.useSelection],
+    [manifest?.siteId, year, seriesKey, ts.maxPixels, selectionKey, rangeKey, ts.useSelection, ts.sampleSeed],
     { enabled, keepPrevious: true },
   );
 }
@@ -148,7 +151,7 @@ function useYearsData() {
     async ({ signal, onProgress }) => {
       if (!manifest) throw new Error('No site selected.');
       const { ids, available } = await pixelIdsFor(
-        manifest, years, ts.series, ts.useSelection, selection, ts.maxPixels, { signal, onProgress },
+        manifest, years, ts.series, ts.useSelection, selection, ts.maxPixels, ts.sampleSeed, { signal, onProgress },
       );
       if (ids.length === 0) throw new Error(`No pixels carry ${ts.series.join(' or ')} data.`);
       const summary = await getDailySummary(
@@ -164,7 +167,7 @@ function useYearsData() {
         usedSelection: ts.useSelection,
       };
     },
-    [manifest?.siteId, years.join(','), ts.series.join(','), ts.maxPixels, selectionKey, ts.useSelection],
+    [manifest?.siteId, years.join(','), ts.series.join(','), ts.maxPixels, selectionKey, ts.useSelection, ts.sampleSeed],
     { enabled, keepPrevious: true },
   );
 }
@@ -237,7 +240,7 @@ export function TimeSeriesView() {
     if (chart === '3d') {
       return {
         ...base,
-        margin: { l: 0, r: 0, t: 0, b: 0 },
+        margin: { l: 0, r: 0, t: MODEBAR_BAND, b: 0 },
         scene: {
           xaxis: { title: { text: 'Date' }, color: dark ? '#98a3b3' : '#666d7a' },
           yaxis: { title: { text: 'Pixel' }, color: dark ? '#98a3b3' : '#666d7a' },
@@ -726,7 +729,7 @@ function StatusFooter({
       <span className="truncate">{parts.join(' · ') || 'Nothing loaded yet'}</span>
       {sampled && (
         <span className="shrink-0 text-[var(--text-faint)]">
-          showing a random sample — raise the pixel cap to widen it
+          showing a random sample — draw a new one or raise Max pixels in the inspector
         </span>
       )}
       {state.error && state.data && (
@@ -1046,6 +1049,17 @@ export function TimeSeriesInspector() {
           }
           disabled={selection.length === 0 && !ts.useSelection}
         />
+        {!ts.useSelection && (
+          <Button
+            size="sm"
+            className="mt-2 w-full"
+            icon={<Shuffle size={13} />}
+            onClick={() => update({ sampleSeed: newSeed() })}
+            title="Plot a different random set of pixels"
+          >
+            New random sample
+          </Button>
+        )}
         {selection.length === 0 && (
           <button
             onClick={() => setView('pixelmap')}

@@ -8,7 +8,7 @@ import { HexagonLayer } from '@deck.gl/aggregation-layers';
 import type { Layer, PickingInfo } from '@deck.gl/core';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import {
-  Crosshair, Eraser, LassoSelect, MapPin, MousePointer2, Send, Square,
+  Crosshair, Eraser, LassoSelect, MapPin, MousePointer2, Send, Shuffle, Square,
 } from 'lucide-react';
 import { MapCanvas, type MapCanvasHandle } from '@/components/MapCanvas';
 import { Button, Card, Chip, EmptyState, Field, Segmented, Slider } from '@/components/ui';
@@ -17,11 +17,13 @@ import { useActiveSite, useAppStore } from '@/store/useAppStore';
 import { ErrorPanel, seriesColor, useAsyncData, useBasemap, useDark } from './shared';
 import { getPixelMeans, getPixelTrace, pixelsInPolygon } from '@/engine/queries';
 import { nearestPixelIndex } from '@/lib/pixelPicking';
+import { pixelIndex } from '@/lib/pixelIndex';
 import { GREENNESS_RAMP, sampleRamp } from '@/lib/colorscales';
 import { compositeCanvas, downloadBlob, downloadCsv, exportBackground, timestampedName } from '@/lib/export';
 import { canvasToBlob, copyImage } from '@/lib/figure';
 import { FigureMenu } from '@/components/FigureMenu';
 import { formatCount, formatValue, isoFromMs } from '@/lib/format';
+import { MAX_PIXEL_SAMPLE } from '@/engine/sql';
 import type { PixelGeometry } from '@/lib/types';
 
 type Tool = 'point' | 'rect' | 'lasso';
@@ -39,9 +41,9 @@ export function PixelMapView() {
 
   const selection = useAppStore((s) => s.selection);
   const plotted = useAppStore((s) => s.plottedPixels);
-  const selectionCap = useAppStore((s) => s.selectionCap);
+  const canRedraw = useAppStore((s) => (s.selectionPool?.length ?? 0) > s.selectionCap);
   const togglePixel = useAppStore((s) => s.togglePixel);
-  const setSelection = useAppStore((s) => s.setSelection);
+  const selectShape = useAppStore((s) => s.selectShape);
   const setFocusedPixel = useAppStore((s) => s.setFocusedPixel);
   const ts = useAppStore((s) => s.timeseries);
   const toast = useAppStore((s) => s.toast);
@@ -59,26 +61,26 @@ export function PixelMapView() {
 
   const positions = useMemo(() => packPositions(geometry), [geometry]);
   const bounds = useMemo(() => boundsOf(geometry), [geometry]);
-  const indexById = useMemo(() => {
-    const m = new Map<number, number>();
-    if (geometry) for (let i = 0; i < geometry.pixelId.length; i++) m.set(geometry.pixelId[i], i);
-    return m;
-  }, [geometry]);
-
+  const siteSpanMeters = useMemo(() => {
+    if (!bounds) return 500;
+    const [w, s, e, n] = bounds;
+    const midLat = ((s + n) / 2) * (Math.PI / 180);
+    return Math.max(100, (n - s) * 111_320, (e - w) * 111_320 * Math.cos(midLat));
+  }, [bounds]);
   const subset = useCallback(
     (ids: number[]): Float64Array => {
       if (!geometry) return new Float64Array(0);
       const out = new Float64Array(ids.length * 2);
       let k = 0;
       for (const id of ids) {
-        const i = indexById.get(id);
-        if (i === undefined) continue;
+        const i = pixelIndex(geometry.pixelId, id);
+        if (i < 0) continue;
         out[k++] = geometry.lon[i];
         out[k++] = geometry.lat[i];
       }
       return out.subarray(0, k);
     },
-    [geometry, indexById],
+    [geometry],
   );
 
   const meanRange = useMemo(() => {
@@ -100,23 +102,31 @@ export function PixelMapView() {
     const secondary: [number, number, number] = dark ? [251, 146, 60] : [234, 88, 12];
 
     if (mode3d) {
-      const points = Array.from({ length: n }, (_, i) => ({
-        position: [geometry.lon[i], geometry.lat[i]] as [number, number],
-        evi: means.data?.get(geometry.pixelId[i]) ?? 0,
-      }));
+      // Packed attributes, not one object per pixel: GF-Guy has 1.3 M pixels.
+      const evi = meanRange ? new Float32Array(n) : null;
+      if (evi) for (let i = 0; i < n; i++) evi[i] = means.data?.get(geometry.pixelId[i]) ?? 0;
       return [
-        new HexagonLayer<{ position: [number, number]; evi: number }>({
+        new HexagonLayer({
           id: 'hex',
-          data: points,
-          getPosition: (d) => d.position,
+          // Aggregation layers read positions through the accessor, not a
+          // binary attribute; `target` is deck's reusable scratch array.
+          data: { length: n },
+          getPosition: (_: unknown, { index, target }: { index: number; target: number[] }) => {
+            target[0] = geometry.lon[index];
+            target[1] = geometry.lat[index];
+            return target as [number, number];
+          },
           radius: hexRadius,
           extruded: true,
-          elevationScale: 12,
+          // Tallest column about a third of the site's width: the default
+          // 0–1000 m range made kilometre towers over a 400 m site.
+          elevationRange: [0, siteSpanMeters * 0.35],
+          elevationScale: 1,
           coverage: 0.92,
           pickable: true,
           colorRange: GREENNESS_RAMP.slice(2).map((h) => hexToTuple(h)),
           material: { ambient: 0.55, diffuse: 0.6, shininess: 40, specularColor: [255, 255, 255] },
-          getColorWeight: (d) => (meanRange ? d.evi : 1),
+          getColorWeight: (_: unknown, { index }: { index: number }) => (evi ? evi[index] : 1),
           colorAggregation: meanRange ? 'MEAN' : 'SUM',
           getElevationWeight: () => 1,
           elevationAggregation: 'SUM',
@@ -202,7 +212,7 @@ export function PixelMapView() {
     }
 
     return out;
-  }, [geometry, positions, selection, plotted, dark, mode3d, hexRadius, colorByEvi, means.data, meanRange, subset]);
+  }, [geometry, positions, selection, plotted, dark, mode3d, hexRadius, colorByEvi, means.data, meanRange, subset, siteSpanMeters]);
 
   const onPick = useCallback(
     (info: PickingInfo) => {
@@ -231,8 +241,8 @@ export function PixelMapView() {
         flat[i * 2 + 1] = p[1];
       });
       try {
-        const result = await pixelsInPolygon(geometry, flat, selectionCap);
-        if (result.total === 0) {
+        const inside = await pixelsInPolygon(geometry, flat);
+        if (inside.length === 0) {
           toast({
             kind: 'info',
             title: 'Nothing inside that shape',
@@ -240,7 +250,7 @@ export function PixelMapView() {
           });
           return;
         }
-        setSelection(result.ids, { clipped: result.clipped });
+        selectShape(inside);
       } catch (err) {
         toast({
           kind: 'error',
@@ -249,7 +259,7 @@ export function PixelMapView() {
         });
       }
     },
-    [geometry, selectionCap, setSelection, toast],
+    [geometry, selectShape, toast],
   );
 
   const mapImage = () => {
@@ -279,9 +289,20 @@ export function PixelMapView() {
       <div className="card h-full">
         <ErrorPanel
           message={
-            site.notes.find((n) => n.includes('pixels_geom') || n.includes('CRS')) ??
-            'This site has no usable pixel geometry, so pixels cannot be placed on a map. The Time Series view still works.'
+            site.status === 'loading'
+              ? 'Loading pixel geometry…'
+              : (site.notes.find((n) => n.startsWith('Pixels cannot be placed')) ??
+                site.notes.find((n) => /pixels_geom|CRS/.test(n)) ??
+                site.notes.find((n) => n.includes('pixels_meta')) ??
+                site.error ??
+                'This site has no usable pixel geometry, so pixels cannot be placed on a map. The Time Series view still works.')
           }
+          onRetry={
+            site.manifest.geom && site.status !== 'loading'
+              ? () => void useAppStore.getState().reloadSite(site.manifest.siteId)
+              : undefined
+          }
+          retryLabel="Reload metadata"
         />
       </div>
     );
@@ -299,7 +320,7 @@ export function PixelMapView() {
       onClick={onPick}
       getTooltip={(info) => {
         if (info.layer?.id === 'hex') {
-          const count = (info.object as { points?: unknown[] } | undefined)?.points?.length ?? 0;
+          const count = (info.object as { count?: number } | undefined)?.count ?? 0;
           return `<b>${count} pixels</b>${
             meanRange ? `<br/>mean EVI ${formatValue((info.object as { colorValue?: number }).colorValue ?? NaN, 4)}` : ''
           }`;
@@ -326,6 +347,13 @@ export function PixelMapView() {
           <ToolButton icon={Square} label="Rectangle" active={tool === 'rect'} onClick={() => setTool('rect')} />
           <ToolButton icon={LassoSelect} label="Lasso" active={tool === 'lasso'} onClick={() => setTool('lasso')} />
           <div className="mx-0.5 h-5 w-px bg-[var(--border)]" />
+          {canRedraw && (
+            <ToolButton
+              icon={Shuffle}
+              label="Redraw the random sample"
+              onClick={() => useAppStore.getState().redrawSample()}
+            />
+          )}
           <ToolButton
             icon={Eraser}
             label="Clear selection"
@@ -381,7 +409,7 @@ export function PixelMapView() {
       </div>
 
       {mode3d && (
-        <div className="pointer-events-auto absolute bottom-3 right-3 z-10 w-[190px] rounded-[12px] border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 shadow-[var(--shadow-card)]">
+        <div className="pointer-events-auto absolute right-3 top-[52px] z-10 w-[190px] rounded-[12px] border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 shadow-[var(--shadow-card)]">
           <Field label="Hex radius" hint={`${hexRadius} m`}>
             <Slider min={6} max={120} step={2} value={hexRadius} onChange={setHexRadius} />
           </Field>
@@ -565,6 +593,8 @@ export function PixelMapInspector() {
   const selectionCap = useAppStore((s) => s.selectionCap);
   const setSelectionCap = useAppStore((s) => s.setSelectionCap);
   const clearSelection = useAppStore((s) => s.clearSelection);
+  const redrawSample = useAppStore((s) => s.redrawSample);
+  const poolSize = useAppStore((s) => s.selectionPool?.length ?? 0);
   const focused = useAppStore((s) => s.focusedPixel);
   const ts = useAppStore((s) => s.timeseries);
   const update = useAppStore((s) => s.updateTimeseries);
@@ -604,14 +634,17 @@ export function PixelMapInspector() {
         }
       >
         <div className="space-y-3">
-          <Field label="Cap" hint={formatCount(cap)}>
+          <Field label="Sample size" hint={formatCount(cap)}>
             <Slider
               min={25}
-              max={5000}
+              max={MAX_PIXEL_SAMPLE}
               step={25}
               value={cap}
               onChange={(v) => setCapDraft(v)}
             />
+            <p className="pt-1 text-[11px] leading-snug text-[var(--text-faint)]">
+              A rectangle or lasso around more pixels than this takes a random sample of them.
+            </p>
             {capDraft !== null && capDraft !== selectionCap && (
               <Button
                 size="sm"
@@ -622,10 +655,21 @@ export function PixelMapInspector() {
                   setCapDraft(null);
                 }}
               >
-                Apply cap
+                {poolSize > 0 ? 'Resample the shape' : 'Apply'}
               </Button>
             )}
           </Field>
+
+          {poolSize > selectionCap && (
+            <div className="flex items-center justify-between gap-2 rounded-[10px] bg-[var(--bg-sunken)] px-2.5 py-2">
+              <span className="text-[11.5px] leading-snug text-[var(--text-muted)]">
+                Random {formatCount(selectionCap)} of the {formatCount(poolSize)} pixels in the shape
+              </span>
+              <Button size="sm" icon={<Shuffle size={13} />} onClick={redrawSample}>
+                Redraw
+              </Button>
+            </div>
+          )}
 
           <Button
             className="w-full"
@@ -647,7 +691,7 @@ export function PixelMapInspector() {
                   timestampedName([site.manifest.siteId, 'selection'], 'csv'),
                   ['pixel_id', 'lon', 'lat', 'x', 'y'],
                   selection.map((id) => {
-                    const i = site.geometry!.pixelId.indexOf(id);
+                    const i = pixelIndex(site.geometry!.pixelId, id);
                     return i < 0
                       ? [id, '', '', '', '']
                       : [
@@ -717,7 +761,8 @@ export function PixelMapInspector() {
             <Crosshair size={11} className="mr-1 inline" /> Click toggles one pixel in and out.
           </li>
           <li>
-            <Square size={11} className="mr-1 inline" /> Drag a rectangle to take everything inside.
+            <Square size={11} className="mr-1 inline" /> Drag a rectangle to take everything inside,
+            or a random sample when it holds more than the sample size.
           </li>
           <li>
             <LassoSelect size={11} className="mr-1 inline" /> Lasso for irregular shapes; release to
@@ -730,7 +775,7 @@ export function PixelMapInspector() {
 }
 
 function PixelFacts({ geometry, pixelId }: { geometry: PixelGeometry; pixelId: number }) {
-  const i = geometry.pixelId.indexOf(pixelId);
+  const i = pixelIndex(geometry.pixelId, pixelId);
   if (i < 0) return null;
   const rows: Array<[string, string]> = [
     ['Longitude', geometry.lon[i].toFixed(6)],

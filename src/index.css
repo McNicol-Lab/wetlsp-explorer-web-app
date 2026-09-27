@@ -213,3 +213,16 @@
 .maplibregl-ctrl-attrib {
   font-size: 10px;
 }
+/* Tailwind's preflight makes every svg `display: block`, which stacks each
+   Plotly toolbar icon on its own line: the toolbar became a tall column over
+   the plot's top-right corner. Plotly lays its icons out inline. */
+.js-plotly-plot .modebar-btn svg {
+  display: inline;
+}
+
+/* Zoom and scale stay usable while the rectangle / lasso overlay (z-5) is
+   capturing the map, and still sit under the view toolbars (z-10). */
+.maplibregl-ctrl-bottom-right,
+.maplibregl-ctrl-bottom-left {
+  z-index: 6;
+}

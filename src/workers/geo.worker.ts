@@ -56,8 +56,9 @@ const handlers = {
   },
 
   /**
-   * Pixels inside a polygon. A bounding-box prefilter runs first — the Shiny
-   * guard — so a lasso over 14k pixels never costs 14k ray casts.
+   * Every pixel inside a polygon. A bounding-box prefilter runs first — the
+   * Shiny guard — so a lasso over 14k pixels never costs 14k ray casts. The
+   * caller draws a random sample when there are more than it can plot.
    */
   async pixelsInPolygon(
     ctx: HandlerContext,
@@ -65,8 +66,7 @@ const handlers = {
     lat: Float64Array,
     pixelId: Int32Array,
     ring: Float64Array,
-    cap: number,
-  ): Promise<{ ids: Int32Array; total: number; clipped: boolean }> {
+  ): Promise<Int32Array> {
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -87,9 +87,7 @@ const handlers = {
       if ((i & 0xfff) === 0) ctx.throwIfCancelled();
     }
 
-    const clipped = hits.length > cap;
-    const kept = clipped ? hits.slice(0, cap) : hits;
-    return { ids: Int32Array.from(kept), total: hits.length, clipped };
+    return Int32Array.from(hits);
   },
 };
 

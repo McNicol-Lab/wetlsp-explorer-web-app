@@ -46,7 +46,7 @@ export function PhenometricsView() {
   const [view, setView] = useState<FigureView>(IDENTITY_VIEW);
   const [probe, setProbe] = useState<(Probe & { panel: number }) | null>(null);
   const figureRefs = useRef<Array<RasterFigureHandle | null>>([]);
-  const reliefRef = useRef<Raster3DHandle | null>(null);
+  const reliefRefs = useRef<Array<Raster3DHandle | null>>([]);
   const mapRefs = useRef<Array<MapCanvasHandle | null>>([]);
 
   const panels = ph.panels;
@@ -140,24 +140,18 @@ export function PhenometricsView() {
     const lyr = displayedLayer ?? 'layer';
     const info = layerInfo(lyr);
     const pairs: Array<{ canvas: HTMLCanvasElement; label: string }> = [];
-    if (mode === 'relief') {
-      const canvas = reliefRef.current?.canvas();
-      if (!canvas) throw new Error('The 3D view is not ready yet.');
-      pairs.push({ canvas, label: data[0] ? `${data[0].siteId} ${data[0].year}` : '' });
-    } else {
-      if (mode === 'map') mapRefs.current.forEach((r) => r?.repaint());
-      const refs = mode === 'map' ? mapRefs.current : figureRefs.current;
-      data.forEach((p, i) => {
-        const canvas = refs[i]?.canvas();
-        if (canvas) pairs.push({ canvas, label: `${p.siteId} ${p.year}` });
-      });
-    }
+    if (mode === 'map') mapRefs.current.forEach((r) => r?.repaint());
+    const refs = mode === 'map' ? mapRefs.current : mode === 'relief' ? reliefRefs.current : figureRefs.current;
+    data.forEach((p, i) => {
+      const canvas = refs[i]?.canvas();
+      if (canvas) pairs.push({ canvas, label: `${p.siteId} ${p.year}` });
+    });
     if (pairs.length === 0) throw new Error('There is nothing on screen to export yet.');
 
     const siteIds = [...new Set(data.map((p) => p.siteId))];
     const name = siteIds.length === 1 ? catalogIndex.get(siteIds[0])?.site_name : undefined;
     const pooled = data[0]?.slice && data[0].slice.downsample > 1 ? ` · ${data[0].slice.downsample}× pooled` : '';
-    const oneScale = mode === 'relief' || pairs.length === 1 || ph.syncScale;
+    const oneScale = pairs.length === 1 || ph.syncScale;
     const scale = scales?.[0];
     return figureCard(
       pairs.map((p) => p.canvas),
@@ -165,7 +159,7 @@ export function PhenometricsView() {
         title: `${lyr} · ${data.map((p) => `${p.siteId} ${p.year}`).join(', ')}`,
         subtitle: `${info.description}${name ? ` · ${name}` : ''}${pooled}${!oneScale ? ' · each panel has its own colour scale' : ''}`,
         panelLabels: pairs.length > 1 ? pairs.map((p) => p.label) : undefined,
-        cols: mode === 'relief' ? 1 : Math.min(2, pairs.length),
+        cols: Math.min(2, pairs.length),
         background: exportBackground(),
         legend:
           oneScale && scale
@@ -247,9 +241,7 @@ export function PhenometricsView() {
     );
   }
 
-  const renderedPanels = mode === 'relief'
-    ? (rasters.data?.[0]?.slice ? 1 : 0)
-    : (rasters.data ?? []).filter((p) => p.slice).length;
+  const renderedPanels = (rasters.data ?? []).filter((p) => p.slice).length;
   const cols = (rasters.data?.length ?? 0) <= 1 ? 1 : 2;
   const rows = (rasters.data?.length ?? 0) <= 2 ? 1 : 2;
 
@@ -346,19 +338,6 @@ export function PhenometricsView() {
               </Button>
             }
           />
-        ) : mode === 'relief' ? (
-          rasters.data[0]?.slice && scales ? (
-            <Raster3D
-              ref={reliefRef}
-              slice={rasters.data[0].slice}
-              scale={scales[0]}
-              getTooltip={(cell) =>
-                tooltipHtml(rasters.data![0].slice!.layer, rasters.data![0].year, cell.value, cell.col, cell.row)
-              }
-            />
-          ) : (
-            <ErrorPanel message={rasters.data[0]?.error ?? 'That layer could not be read.'} />
-          )
         ) : (
           <div
             className="grid h-full w-full gap-2 p-2"
@@ -385,6 +364,7 @@ export function PhenometricsView() {
                 onProbe={(p) => setProbe(p ? { ...p, panel: i } : null)}
                 figureRef={(r) => (figureRefs.current[i] = r)}
                 mapRef={(r) => (mapRefs.current[i] = r)}
+                reliefRef={(r) => (reliefRefs.current[i] = r)}
                 onRemove={
                   panels.length > 1
                     ? () => update({ panels: panels.filter((p) => p.siteId !== panel.siteId || p.year !== panel.year) })
@@ -412,7 +392,7 @@ export function PhenometricsView() {
 /* ----------------------------------------------------------------- panel */
 
 function Panel({
-  panel, index, mode, layer, scale, dark, basemap, view, onView, onProbe, figureRef, mapRef, onRemove,
+  panel, index, mode, layer, scale, dark, basemap, view, onView, onProbe, figureRef, mapRef, reliefRef, onRemove,
 }: {
   panel: PanelData;
   index: number;
@@ -426,6 +406,7 @@ function Panel({
   onProbe: (p: Probe | null) => void;
   figureRef: (r: RasterFigureHandle | null) => void;
   mapRef: (r: MapCanvasHandle | null) => void;
+  reliefRef: (r: Raster3DHandle | null) => void;
   onRemove?: () => void;
 }) {
   const image = useMemo(
@@ -452,6 +433,13 @@ function Panel({
 
       {!panel.slice || !scale ? (
         <ErrorPanel message={panel.error ?? `"${layer}" is not in this file.`} />
+      ) : mode === 'relief' ? (
+        <Raster3D
+          ref={reliefRef}
+          slice={panel.slice}
+          scale={scale}
+          getTooltip={(cell) => tooltipHtml(panel.slice!.layer, panel.year, cell.value, cell.col, cell.row)}
+        />
       ) : mode === 'map' ? (
         panel.slice.bboxWgs84 ? (
           <MapCanvas

@@ -113,7 +113,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       canvasContextAttributes: { preserveDrawingBuffer: true, antialias: true },
       maxPitch: 75,
     });
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+    // Bottom-right: every view overlays its own toolbar along the top edge,
+    // which would otherwise cover the zoom buttons.
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
     const overlay = new MapLibreOverlay({
@@ -188,6 +190,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   useEffect(() => {
     overlayRef.current?.setProps({ layers });
   }, [layers]);
+
+  // Tilt when a view switches to 3D (the Pixel Map skyline) and back.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && map.getPitch() !== pitch) map.easeTo({ pitch, duration: 500 });
+  }, [pitch]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -11,6 +11,7 @@ import {
   detectDataset,
   isIngestable,
   manifestFromDetection,
+  siteIdMismatch,
   stripCommonRoot,
   type InputFile,
 } from './detect';
@@ -351,11 +352,18 @@ export async function ingestEntries(
   progress({ phase: 'Identifying site', fraction: null });
   try {
     meta = await peekMeta(metaParts);
-    if (meta.site_id && meta.site_id.trim()) siteId = meta.site_id.trim();
-  } catch {
-    // Reading meta is a nicety; detection already produced a usable id.
+    const declared = meta.site_id?.trim();
+    if (declared) {
+      const mismatch = siteIdMismatch(declared, detection.namedIds);
+      if (mismatch) detection.warnings.push(mismatch);
+      siteId = declared;
+    }
+  } catch (err) {
+    // Detection already produced a usable id; the meta is re-read when the
+    // site opens, so a transient failure here is not saved as "no metadata".
+    meta = {};
     detection.warnings.push(
-      'Could not read `pixels_meta` while importing, so the site id came from the filenames.',
+      `Could not read \`pixels_meta\` while importing (${(err instanceof Error ? err.message : String(err)).split('\n')[0]}), so the site id came from the file names.`,
     );
   }
 
