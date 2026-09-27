@@ -1,3 +1,9 @@
+**Fixed in v1.2.1: sites that "could not be opened".** Removing a site and
+downloading or importing it again in the same session could fail with
+"TProtocolException: Invalid data" (or "NotReadableError" when importing over
+a site). Replaced sites now always open. If you saw this in v1.2.0, restarting
+the app also clears it; your downloaded sites are fine.
+
 **New in v1.2.0**
 
 - **Random pixel samples you can redraw.** A rectangle or lasso around more

@@ -552,9 +552,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!state || state.status === 'loading') return;
     // Start from the stored files: drop DuckDB's handles and every cache
     // derived from the old metadata, including the reprojected pixels.
-    await unregisterSite(state.manifest).catch(() => undefined);
-    clearQueryCaches(siteId);
-    await clearGeometryCache(siteId);
+    await forgetSite(state.manifest);
     set((s) => ({
       sites: { ...s.sites, [siteId]: { ...s.sites[siteId], status: 'idle', facts: null, geometry: null } },
     }));
@@ -580,9 +578,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get().sites[siteId];
     if (!state) return;
     try {
-      await unregisterSite(state.manifest);
-      await releaseSite(siteId);
-      clearQueryCaches(siteId);
+      await forgetSite(state.manifest);
       await deleteSiteFiles(siteId);
       await deleteManifest(siteId);
     } catch (err) {
@@ -705,6 +701,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 /* ----------------------------------------------------------------- import */
 
+/**
+ * Let go of everything read from a site's stored files: DuckDB and NetCDF
+ * handles, query caches and the reprojected geometry. Needed before the
+ * files are deleted or replaced, or later reads see the old files.
+ */
+async function forgetSite(manifest: SiteManifest): Promise<void> {
+  await unregisterSite(manifest).catch(() => undefined);
+  await releaseSite(manifest.siteId).catch(() => undefined);
+  clearQueryCaches(manifest.siteId);
+  await clearGeometryCache(manifest.siteId);
+}
+
 /** Chart choices worth remembering between launches (not the data filters). */
 function pickChartPrefs(p: Partial<TimeseriesSettings> | undefined): Partial<TimeseriesSettings> {
   if (!p) return {};
@@ -783,7 +791,13 @@ async function runImport(jobs: ImportJob[]): Promise<void> {
               folderHint: job.hint,
               origin: job.origin,
               signal: controller.signal,
-              ensureSpace: (siteId, bytes) => ensureSpace(siteId, bytes, canSkip),
+              ensureSpace: async (siteId, bytes) => {
+                await ensureSpace(siteId, bytes, canSkip);
+                // Re-importing a site overwrites its files: drop every handle
+                // and cache on the old ones first.
+                const existing = get().sites[siteId];
+                if (existing) await forgetSite(existing.manifest);
+              },
               onProgress: (p) => set((s) => ({ ingest: { ...s.ingest, progress: p } })),
             });
           } catch (err) {
@@ -831,6 +845,7 @@ async function runImport(jobs: ImportJob[]): Promise<void> {
         }
         // Open the first site straight away; later ones load in the background.
         if (imported.length === 1) void get().selectSite(manifest.siteId);
+        else if (get().activeSiteId === manifest.siteId) void get().loadSite(manifest.siteId);
       } catch (err) {
         if (err instanceof SkipSite) skipped.push(label);
         else if (err instanceof CancelledError || controller.signal.aborted) break;
