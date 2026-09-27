@@ -100,7 +100,7 @@ export async function getDb(): Promise<duckdb.AsyncDuckDB> {
   return booting;
 }
 
-/** Warm the engine without running a query — used by "Prepare for offline". */
+/** Warm the engine without running a query, for "Prepare for offline". */
 export async function warmEngine(): Promise<void> {
   await requireOfflineShell();
   await cacheEngineBundle(await duckdb.selectBundle(BUNDLES));

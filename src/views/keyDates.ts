@@ -2,8 +2,8 @@
  * Season key dates read off a daily mean EVI curve: the peak, and the dates the
  * curve crosses half its amplitude on the way up and down (a common,
  * transparent "50% amplitude" convention). This is a quick reading of the
- * plotted line, not the WetLSP phenometric product — the NetCDF layers in the
- * Phenometrics view are the reference values.
+ * plotted line. The NetCDF layers in the Phenometrics view are the reference
+ * values.
  */
 export interface KeyPoint {
   /** ISO date, interpolated between the two days either side of the crossing. */

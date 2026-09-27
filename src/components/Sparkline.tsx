@@ -1,4 +1,4 @@
-/** Inline SVG sparkline — small enough that a charting library would be silly. */
+/** Inline SVG sparkline. It is too small to be worth a charting library. */
 export function Sparkline({
   x,
   y,

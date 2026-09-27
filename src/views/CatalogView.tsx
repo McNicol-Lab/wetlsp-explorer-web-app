@@ -23,7 +23,7 @@ const COLUMNS: Array<{ key: SortKey; label: string; width: string; numeric?: boo
   { key: 'base_network', label: 'Network', width: 'minmax(90px, 0.9fr)' },
   { key: 'lat', label: 'Lat', width: '68px', numeric: true },
   { key: 'lon', label: 'Lon', width: '68px', numeric: true },
-  // Fixed, and wide enough for four year chips on one line — they must never wrap
+  // Fixed, and wide enough for four year chips on one line; they must never wrap
   // into a row that is only ROW_HEIGHT tall.
   { key: 'years', label: 'Years', width: '184px' },
 ];

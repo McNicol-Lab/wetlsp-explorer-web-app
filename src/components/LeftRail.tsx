@@ -1,6 +1,6 @@
 /**
  * Left rail: identity, the import action, the loaded-site list, the active
- * site's parsed files, and Settings — in that order, top to bottom.
+ * site's parsed files, and Settings, in that order from top to bottom.
  */
 import { useState } from 'react';
 import clsx from 'clsx';

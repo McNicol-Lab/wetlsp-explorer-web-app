@@ -1,6 +1,6 @@
 appId: edu.wetlsp.explorer
 productName: WetLSP Explorer
-copyright: Copyright © 2026 Bhagyesh Sagole and Gavin McNicol
+copyright: Copyright © 2026 Bhagyesh Sagole and Pawan Kumar
 directories:
   output: release
 files:

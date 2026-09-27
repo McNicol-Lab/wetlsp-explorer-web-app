@@ -1,6 +1,6 @@
 /**
- * Whole-window drag-and-drop. A folder dropped anywhere on the app ingests —
- * there is no upload button to hunt for.
+ * Whole-window drag-and-drop. A folder dropped anywhere on the app is
+ * imported, so there is no upload button to hunt for.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderDown } from 'lucide-react';

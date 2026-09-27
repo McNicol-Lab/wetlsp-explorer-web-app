@@ -18,7 +18,7 @@ const SOURCE = 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&dis
 const WANTED = new Set(['latin', 'latin-ext']);
 
 if (existsSync(cssPath)) {
-  console.log('fonts: public/fonts/inter.css already present — skipping download');
+  console.log('fonts: public/fonts/inter.css already present, skipping download');
   process.exit(0);
 }
 
@@ -69,5 +69,5 @@ async function main() {
 main().catch((err) => {
   // A missing font is a cosmetic problem, not a build failure: the CSS font
   // stack falls back to the system sans.
-  console.warn(`fonts: skipped (${err.message}) — falling back to the system sans stack`);
+  console.warn(`fonts: skipped (${err.message}); using the system sans-serif fonts instead`);
 });

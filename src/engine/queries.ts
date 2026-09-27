@@ -217,7 +217,7 @@ export async function clearGeometryCache(siteId: string): Promise<void> {
 
 /**
  * Pixel geometry with both projected and WGS84 coordinates. Computed once per
- * site and cached in OPFS — reprojection is deterministic, so a cache hit is
+ * site and cached in OPFS. Reprojection is deterministic, so a cache hit is
  * indistinguishable from a recompute.
  */
 export async function getPixelGeometry(
@@ -230,7 +230,7 @@ export async function getPixelGeometry(
     try {
       return await unpackGeometry(cached);
     } catch {
-      /* stale or truncated cache — fall through and rebuild */
+      /* stale or truncated cache: fall through and rebuild */
     }
   }
 

@@ -103,7 +103,7 @@ export function makeColorScale(layer: string, domain: [number, number]): ColorSc
   const span = hi - lo;
 
   if (family === 'qa') {
-    // Discrete classes 1..4 — nearest-class lookup, not interpolation.
+    // Discrete classes 1..4 use the nearest class; there is no interpolation.
     const stops = QA_STEPS;
     const color = (v: number): RGBA => {
       if (!Number.isFinite(v)) return TRANSPARENT;

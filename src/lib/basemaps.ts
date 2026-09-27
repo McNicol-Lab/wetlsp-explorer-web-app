@@ -1,7 +1,7 @@
 /**
  * OpenFreeMap styles for light/dark maps, Esri raster imagery for satellite.
  * The `none` style needs no network at all and is what the app falls
- * back to offline — pixels stay correctly positioned, they just lose imagery.
+ * back to offline. Pixels stay correctly positioned and only lose the imagery.
  */
 import type { StyleSpecification } from 'maplibre-gl';
 
@@ -27,7 +27,7 @@ function raster(
   };
 }
 
-/** No tiles at all — a calm grid so pixels still read as a spatial layout. */
+/** No tiles at all: a plain grid, so pixels still read as a spatial layout. */
 function blank(dark: boolean): StyleSpecification {
   return {
     version: 8,

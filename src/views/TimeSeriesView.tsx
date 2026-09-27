@@ -1,6 +1,6 @@
 /**
- * EVI time series. The default is a line chart — the daily mean per series,
- * its interquartile band, and the season's key dates — with the per-pixel
+ * EVI time series. The default is a line chart of the daily mean per series,
+ * its interquartile band, and the season's key dates, with the per-pixel
  * "spaghetti" one toggle away. "Compare years" overlays every year's mean on
  * one calendar; "3D ribbon" shows the same rows as a surface.
  *

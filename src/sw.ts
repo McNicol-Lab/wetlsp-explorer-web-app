@@ -2,7 +2,7 @@
 /**
  * Service worker.
  *
- * The app shell — including the Plotly bundle and the h5wasm NetCDF worker — is
+ * The app shell, including the Plotly bundle and the h5wasm NetCDF worker, is
  * precached, so every view works with the network off. The 34 MB DuckDB wasm is
  * deliberately left out of the precache (it would make installing unbearable);
  * it is runtime-cached the first time the engine boots, which is also what

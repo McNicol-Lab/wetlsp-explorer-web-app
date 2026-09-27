@@ -40,7 +40,7 @@ export interface SiteManifest {
   timeseries: StoredTable | null;
   netcdf: NetcdfFile[];
   readme: StoredFile[];
-  /** Everything we could not classify — kept so nothing silently vanishes. */
+  /** Everything we could not classify, kept so nothing silently vanishes. */
   unrecognised: StoredFile[];
   warnings: string[];
   totalBytes: number;

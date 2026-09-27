@@ -28,7 +28,7 @@ export async function downloadCanvasPng(
 
 /**
  * Composite one or more canvases (deck.gl over MapLibre, say) onto a white or
- * dark backdrop and save that — a bare WebGL canvas exports transparent.
+ * dark backdrop and save that. A bare WebGL canvas exports transparent.
  */
 export async function downloadCompositePng(
   canvases: HTMLCanvasElement[],

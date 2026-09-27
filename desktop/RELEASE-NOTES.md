@@ -34,8 +34,9 @@ the app also clears it; your downloaded sites are fine.
 - **Load problems are shown, with a fix.** If a site's metadata cannot be read,
   the Overview says why, and *Reload metadata* reads it again. The app warns
   when a site's metadata names a different site than its files.
-- **Sample sites moved** to the lab's release (McNicol-Lab/wetlsp-sample-data),
-  now about 1 GB: annual phenometrics and spline-smoothed daily EVI only.
+- **Sample sites moved** to the lab's release (McNicol-Lab/wetlsp-sample-data).
+  They are now about 1 GB and hold only annual phenometrics and spline-smoothed
+  daily EVI.
 - Map zoom buttons moved to the bottom right, where toolbars no longer cover
   them. The chart toolbar no longer sits on the plot. Large sites export and
   inspect pixels faster.
@@ -48,18 +49,16 @@ the clipboard as images.
 
 - **Download sample sites in one click.** The start screen's *Download sample
   sites* button fetches five wetland sites (CA-DSM, FR-LGt, BR-SM1, US-BZF,
-  CZ-Wet; 1.3 GB) and opens the first. No files to find and no unzipping; after
+  CZ-Wet; 1.3 GB) and opens the first, with nothing to find or unzip. After
   that, they work offline.
 - **Upload folder works with any folder.** Pick a folder holding several sites,
   or the `.zip` files Google Drive downloads. Each site is found and imported in turn.
-- **Time series line chart.** Daily mean, interquartile band and estimated
-  green-up, peak and green-down dates, with a *Compare years* view. Per-pixel
-  lines are one toggle away.
+- **Time series line chart.** It shows the daily mean, the interquartile band
+  and estimated green-up, peak and green-down dates, with a *Compare years*
+  view. A toggle adds a line per pixel.
 - **Copy and export figures.** *Copy* puts any chart or map on the clipboard.
   Exports are titled, and the menu adds SVG, slide-sized PNG and a figure caption.
 - **Up to 50 GB of sites.** When storage is full, the app asks you to delete a site first.
-
----
 
 Download the installer for your computer under **Assets**:
 
@@ -67,12 +66,11 @@ Download the installer for your computer under **Assets**:
 - **Mac with an Intel processor:** `mac-x64.dmg`
 - **Windows 10/11, Intel or AMD 64-bit:** `win-x64.exe`
 
-On Mac, open the DMG and drag WetLSP Explorer into Applications. On Windows,
-open the EXE to install for your account. All scientific readers are bundled
-for offline use. The DMG is the installer: drag the app inside it to Applications,
-not the DMG file itself.
+On Mac, open the DMG and drag the WetLSP Explorer app inside it into
+Applications (the app, not the DMG file). On Windows, open the EXE to install
+for your account. The scientific readers are bundled, so the app works offline.
 
-These lab builds are **not signed with a paid Apple or Microsoft certificate**, so
+These lab builds are not signed with a paid Apple or Microsoft certificate, so
 you approve them once. On macOS, double-click the app, click **Done** on the
 "could not verify" warning, then go to **System Settings → Privacy & Security →
 Open Anyway** and confirm **Open**; later launches open normally. Windows may show
@@ -80,9 +78,9 @@ SmartScreen → More info → Run anyway. Only approve installers you obtained f
 this repository or your lab. Managed computers may require IT approval.
 
 See [SETUP.md](https://github.com/bhagyeshsagole/wetlsp-explorer/blob/main/SETUP.md)
-for step-by-step installation and dataset instructions. Repository
-access is required to download here; the owner can also share the installer
-files directly with colleagues.
+for step-by-step installation and dataset instructions. You need access to
+this repository to download from it, or the owner can send colleagues the
+installer files directly.
 
 Updates are manual: download and install the new version over the existing one.
 Imported datasets are stored separately in the app's local profile.
