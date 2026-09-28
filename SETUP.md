@@ -4,7 +4,7 @@ Download the **Mac DMG** or **Windows EXE**, install the app, and open your data
 
 ## Download the installer
 
-Open **[Download WetLSP Explorer](https://github.com/bhagyeshsagole/wetlsp-explorer/releases/latest)**
+Open **[Download WetLSP Explorer](https://github.com/McNicol-Lab/wetlsp-explorer-web-app/releases/latest)**
 and expand **Assets**. Choose the file for your computer:
 
 | Your computer | Download ending in |

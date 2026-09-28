@@ -15,7 +15,7 @@ A desktop app for Mac and Windows. Your data stays on your computer.
 
 ## Download
 
-**[→ Get the latest release](https://github.com/bhagyeshsagole/wetlsp-explorer/releases/latest)**
+**[→ Get the latest release](https://github.com/McNicol-Lab/wetlsp-explorer-web-app/releases/latest)**
 
 Open **Assets** on that page and pick the file for your computer:
 
@@ -108,7 +108,7 @@ and a ready-to-paste figure caption that describes exactly what is plotted.
 ## Updates
 
 Manual for now: close the app, download the new installer from
-[Releases](https://github.com/bhagyeshsagole/wetlsp-explorer/releases/latest),
+[Releases](https://github.com/McNicol-Lab/wetlsp-explorer-web-app/releases/latest),
 and install it over your existing copy. [Details](SETUP.md#updates-and-saved-data).
 
 ## Video walkthrough
@@ -212,7 +212,7 @@ method, the data, and the imagery provider, and acknowledge the ecoϕlab.
 **This app**
 
 - Sagole, B., & Kumar, P. (2026). *WetLSP Explorer* (Version 1.2.7)
-  [Computer software]. <https://github.com/bhagyeshsagole/wetlsp-explorer>
+  [Computer software]. <https://github.com/McNicol-Lab/wetlsp-explorer-web-app>
 
 ## Acknowledgments
 
