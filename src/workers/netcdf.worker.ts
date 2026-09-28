@@ -11,6 +11,7 @@ import { serve, type HandlerContext } from '@/lib/rpc';
 import { readSiteFile } from '@/lib/opfs';
 import { layerInfo, phenometricScaleType } from '@/lib/layers';
 import { epsgFromWkt, makeToWgs84 } from '@/lib/crs';
+import { flipRowsInPlace, rowsStoredSouthUp, type GlobalAttrs } from '@/lib/orientation';
 import type { NetcdfInfo, NetcdfVariable, RasterSlice } from '@/lib/types';
 
 type AnyModule = { FS: { writeFile: (p: string, d: Uint8Array) => void; unlink: (p: string) => void } };
@@ -121,6 +122,14 @@ function attrString(entity: h5wasm.Dataset | h5wasm.Group, names: string[]): str
     if (Array.isArray(v) && typeof v[0] === 'string') return v[0];
   }
   return null;
+}
+
+function globalAttrs(file: h5wasm.File): GlobalAttrs {
+  const out: GlobalAttrs = {};
+  for (const name of ['title', 'software_repository', 'product_version']) {
+    out[name] = attrString(file, [name]) ?? undefined;
+  }
+  return out;
 }
 
 function toFloat64(data: unknown): Float64Array | null {
@@ -347,6 +356,9 @@ const handlers = {
       min = 0;
       max = 0;
     }
+    // Everything downstream draws row 0 at the top (north). Reorder before
+    // pooling so the pooled blocks line up with the northern edge.
+    if (rowsStoredSouthUp(globalAttrs(file))) flipRowsInPlace(values, width, height);
 
     const budget = Math.max(1000, maxCells);
     const factor = n <= budget ? 1 : Math.ceil(Math.sqrt(n / budget));
