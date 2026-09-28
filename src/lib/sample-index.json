@@ -166,16 +166,16 @@
       "siteId": "US-BZF",
       "name": "Bonanza Creek fen",
       "description": "Rich fen in interior Alaska",
-      "bytes": 186270168,
+      "bytes": 192499610,
       "files": [
         {
           "path": "README_parquet.json",
-          "size": 6562,
+          "size": 10065,
           "asset": "US-BZF--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 4130,
+          "size": 7989,
           "asset": "US-BZF--README_parquet.md"
         },
         {
@@ -200,7 +200,7 @@
         },
         {
           "path": "US_BZF_pixels_geom.parquet",
-          "size": 299911,
+          "size": 304806,
           "asset": "US-BZF--US_BZF_pixels_geom.parquet"
         },
         {
@@ -210,7 +210,7 @@
         },
         {
           "path": "US_BZF_pixels_timeseries.parquet",
-          "size": 168529190,
+          "size": 174746375,
           "asset": "US-BZF--US_BZF_pixels_timeseries.parquet"
         }
       ]
