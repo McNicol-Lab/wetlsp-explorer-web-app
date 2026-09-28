@@ -39,7 +39,7 @@ else {
       { role: 'fileMenu' }, { role: 'editMenu' },
       { label: 'View', submenu: [{ role: 'reload' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'togglefullscreen' }] },
       { role: 'windowMenu' },
-      { label: 'Help', submenu: [{ label: 'Downloads and setup', click: () => shell.openExternal('https://github.com/bhagyeshsagole/wetlsp-explorer/releases/latest') }] },
+      { label: 'Help', submenu: [{ label: 'Downloads and setup', click: () => shell.openExternal('https://github.com/McNicol-Lab/wetlsp-explorer-web-app/releases/latest') }] },
     ]));
     await createWindow();
     if (smoke) {

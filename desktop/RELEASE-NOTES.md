@@ -86,7 +86,7 @@ Open Anyway** and confirm **Open**; later launches open normally. Windows may sh
 SmartScreen → More info → Run anyway. Only approve installers you obtained from
 this repository or your lab. Managed computers may require IT approval.
 
-See [SETUP.md](https://github.com/bhagyeshsagole/wetlsp-explorer/blob/main/SETUP.md)
+See [SETUP.md](https://github.com/McNicol-Lab/wetlsp-explorer-web-app/blob/main/SETUP.md)
 for step-by-step installation and dataset instructions. You need access to
 this repository to download from it, or the owner can send colleagues the
 installer files directly.

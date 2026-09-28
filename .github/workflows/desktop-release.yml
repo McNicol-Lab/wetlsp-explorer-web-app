@@ -76,7 +76,7 @@ jobs:
           pattern: installers-*
           path: installers
           merge-multiple: true
-      - name: Publish installers to the private repository release
+      - name: Publish installers to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -8,7 +8,7 @@ title: WetLSP Explorer
 version: 1.2.7
 date-released: 2026-09-27
 license: MIT
-repository-code: https://github.com/bhagyeshsagole/wetlsp-explorer
+repository-code: https://github.com/McNicol-Lab/wetlsp-explorer-web-app
 authors:
   - family-names: Sagole
     given-names: Bhagyesh
