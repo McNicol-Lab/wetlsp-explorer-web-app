@@ -1,3 +1,8 @@
+**Fixed in v1.2.7: phenometric maps are the right way up.** The WetLSP
+phenometrics files store their rows south to north, and the maps were drawn
+upside down in *Figure*, *Map* and *3D relief*. They now show north at the
+top and line up with the basemap and the Pixel Map.
+
 **New in v1.2.6: updated credits and documentation.** The app is credited to
 Bhagyesh Sagole and Pawan Kumar, in the installer's copyright line and in the
 citation. The README and setup guide are reworded for clarity.
