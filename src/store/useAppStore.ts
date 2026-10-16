@@ -46,6 +46,8 @@ import { DEFAULT_PIXEL_SAMPLE, DEFAULT_SELECTION_CAP, MAX_PIXEL_SAMPLE } from '@
 import { newSeed, randomSample } from '@/lib/sampling';
 import { CancelledError } from '@/lib/rpc';
 import type { BasemapId } from '@/lib/basemaps';
+import { MAX_COMPARED_REGIONS, REGION_COLORS, type Attributes, type LonLatPolygons } from '@/lib/regions';
+import type { OverlayRamp, RasterOverlayData } from '@/lib/overlay';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -70,6 +72,43 @@ export interface SiteState {
   notes: string[];
 }
 
+/**
+ * A named group of pixels compared against others in the Time Series: a
+ * rectangle or lasso drawn on the Pixel Map, or a polygon from a shapefile.
+ */
+export interface Region {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  /** `drawn`, or the shapefile layer it came from. */
+  source: string;
+  attributes?: Attributes;
+  polygons: LonLatPolygons;
+  /** Every pixel whose centre is inside. */
+  pool: Int32Array;
+  /** What is plotted: all of `pool`, or a random `selectionCap` of it. */
+  sample: Int32Array;
+  seed: number;
+  /** Plotted in the comparison; at most MAX_COMPARED_REGIONS at once. */
+  enabled: boolean;
+}
+
+export type RegionDraft = Pick<Region, 'name' | 'source' | 'polygons' | 'pool'> &
+  Partial<Pick<Region, 'description' | 'attributes'>>;
+
+/** A GeoTIFF or NetCDF drawn over the Pixel Map. */
+export interface OverlayState {
+  /** Kept so another band or variable can be read without re-picking the file. */
+  file: File;
+  data: RasterOverlayData;
+  visible: boolean;
+  opacity: number;
+  ramp: OverlayRamp;
+  /** Colour range; null uses the 2nd–98th percentiles. */
+  range: [number, number] | null;
+}
+
 /** `line`: mean lines; `years`: one line per year on a shared calendar; `3d`: surface. */
 export type TimeseriesChart = 'line' | 'years' | '3d';
 
@@ -79,6 +118,8 @@ export interface TimeseriesSettings {
   maxPixels: number;
   dateRange: [string, string] | null;
   useSelection: boolean;
+  /** Plot each enabled region's mean and IQR instead of one pixel set. */
+  compareRegions: boolean;
   chart: TimeseriesChart;
   /** Line-chart layers. */
   showMean: boolean;
@@ -157,6 +198,9 @@ interface AppState {
   selectionSeed: number;
   focusedPixel: number | null;
   plottedPixels: number[];
+  /** Per site: regions are made of that site's pixels. */
+  regions: Record<string, Region[]>;
+  overlays: Record<string, OverlayState>;
 
   timeseries: TimeseriesSettings;
   phenometrics: PhenometricSettings;
@@ -212,11 +256,22 @@ interface AppState {
   setFocusedPixel(id: number | null): void;
   setPlottedPixels(ids: number[] | Int32Array): void;
 
+  /** Add regions to the active site; returns how many were enabled for comparison. */
+  addRegions(drafts: RegionDraft[]): number;
+  removeRegion(id: string): void;
+  clearRegions(): void;
+  toggleRegion(id: string): void;
+  renameRegion(id: string, name: string): void;
+  redrawRegionSamples(): void;
+  setOverlay(overlay: OverlayState | null): void;
+  updateOverlay(patch: Partial<OverlayState>): void;
+
   updateTimeseries(patch: Partial<TimeseriesSettings>): void;
   updatePhenometrics(patch: Partial<PhenometricSettings>): void;
 }
 
 let toastId = 0;
+let regionCounter = 0;
 
 const defaultTimeseries: TimeseriesSettings = {
   year: null,
@@ -224,6 +279,7 @@ const defaultTimeseries: TimeseriesSettings = {
   maxPixels: DEFAULT_PIXEL_SAMPLE,
   dateRange: null,
   useSelection: false,
+  compareRegions: false,
   chart: 'line',
   showMean: true,
   showIqr: true,
@@ -271,6 +327,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectionSeed: newSeed(),
   focusedPixel: null,
   plottedPixels: [],
+  regions: {},
+  overlays: {},
 
   timeseries: defaultTimeseries,
   phenometrics: defaultPhenometrics,
@@ -449,6 +507,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         series: facts ? (facts.series.includes('spline') ? ['spline'] : facts.series.slice(0, 1)) : ['spline'],
         dateRange: null,
         useSelection: false,
+        compareRegions: false,
       },
       phenometrics: {
         ...get().phenometrics,
@@ -602,8 +661,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       delete sites[siteId];
       const siteOrder = s.siteOrder.filter((id) => id !== siteId);
       const wasActive = s.activeSiteId === siteId;
+      const regions = { ...s.regions };
+      delete regions[siteId];
+      const overlays = { ...s.overlays };
+      delete overlays[siteId];
       return {
         sites,
+        regions,
+        overlays,
         siteOrder,
         activeSiteId: wasActive ? (siteOrder[0] ?? null) : s.activeSiteId,
         ...(wasActive ? { selection: [], selectionPool: null, focusedPixel: null, plottedPixels: [] } : {}),
@@ -684,6 +749,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { selectionPool: pool, selectionSeed: seed } = get();
     // Same seed: a larger sample keeps every pixel of the smaller one.
     set(pool ? { selectionCap: next, selection: Array.from(randomSample(pool, next, seed)) } : { selectionCap: next });
+    // Regions follow the same sample size, with their own seeds.
+    patchRegions((list) => list.map((r) => ({ ...r, sample: randomSample(r.pool, next, r.seed) })));
   },
 
   setFocusedPixel(id) {
@@ -692,6 +759,110 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setPlottedPixels(ids) {
     set({ plottedPixels: Array.from(ids) });
+  },
+
+  addRegions(drafts) {
+    const siteId = get().activeSiteId;
+    if (!siteId || drafts.length === 0) return 0;
+    const cap = get().selectionCap;
+    const existing = get().regions[siteId] ?? [];
+    const used = new Set(existing.map((r) => r.color));
+    let enabledCount = existing.filter((r) => r.enabled).length;
+    let colorAt = 0;
+    const nextColor = () => {
+      // The first unused colour; cycle once all twelve are taken.
+      for (let i = 0; i < REGION_COLORS.length; i++) {
+        const c = REGION_COLORS[(colorAt + i) % REGION_COLORS.length];
+        if (!used.has(c)) {
+          used.add(c);
+          return c;
+        }
+      }
+      return REGION_COLORS[colorAt++ % REGION_COLORS.length];
+    };
+    let enabled = 0;
+    const added = drafts.map((d): Region => {
+      const seed = newSeed();
+      const on = enabledCount < MAX_COMPARED_REGIONS;
+      if (on) {
+        enabledCount++;
+        enabled++;
+      }
+      return {
+        id: `r${++regionCounter}`,
+        name: d.name,
+        description: d.description ?? null,
+        color: nextColor(),
+        source: d.source,
+        attributes: d.attributes,
+        polygons: d.polygons,
+        pool: d.pool,
+        sample: randomSample(d.pool, cap, seed),
+        seed,
+        enabled: on,
+      };
+    });
+    set((s) => ({ regions: { ...s.regions, [siteId]: [...existing, ...added] } }));
+    return enabled;
+  },
+
+  removeRegion(id) {
+    patchRegions((list) => list.filter((r) => r.id !== id));
+  },
+
+  clearRegions() {
+    patchRegions(() => []);
+    if (get().timeseries.compareRegions) get().updateTimeseries({ compareRegions: false });
+  },
+
+  toggleRegion(id) {
+    const list = activeRegions();
+    const region = list.find((r) => r.id === id);
+    if (!region) return;
+    if (!region.enabled && list.filter((r) => r.enabled).length >= MAX_COMPARED_REGIONS) {
+      get().toast({
+        kind: 'warning',
+        title: `At most ${MAX_COMPARED_REGIONS} regions on one chart`,
+        detail: 'Turn another region off first. More lines than this cannot be told apart.',
+      });
+      return;
+    }
+    patchRegions((l) => l.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
+  },
+
+  renameRegion(id, name) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    patchRegions((l) => l.map((r) => (r.id === id ? { ...r, name: trimmed } : r)));
+  },
+
+  redrawRegionSamples() {
+    const cap = get().selectionCap;
+    patchRegions((l) =>
+      l.map((r) => {
+        if (r.pool.length <= cap) return r;
+        const seed = newSeed();
+        return { ...r, seed, sample: randomSample(r.pool, cap, seed) };
+      }),
+    );
+  },
+
+  setOverlay(overlay) {
+    const siteId = get().activeSiteId;
+    if (!siteId) return;
+    set((s) => {
+      const overlays = { ...s.overlays };
+      if (overlay) overlays[siteId] = overlay;
+      else delete overlays[siteId];
+      return { overlays };
+    });
+  },
+
+  updateOverlay(patch) {
+    const siteId = get().activeSiteId;
+    const current = siteId ? get().overlays[siteId] : undefined;
+    if (!siteId || !current) return;
+    set((s) => ({ overlays: { ...s.overlays, [siteId]: { ...current, ...patch } } }));
   },
 
   updateTimeseries(patch) {
@@ -705,6 +876,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ phenometrics: { ...s.phenometrics, ...patch } }));
   },
 }));
+
+/* ---------------------------------------------------------------- regions */
+
+/** The active site's regions. */
+function activeRegions(): Region[] {
+  const s = useAppStore.getState();
+  return s.activeSiteId ? (s.regions[s.activeSiteId] ?? []) : [];
+}
+
+/** Replace the active site's region list. */
+function patchRegions(fn: (list: Region[]) => Region[]): void {
+  const siteId = useAppStore.getState().activeSiteId;
+  if (!siteId) return;
+  useAppStore.setState((s) => ({ regions: { ...s.regions, [siteId]: fn(s.regions[siteId] ?? []) } }));
+}
+
+const NO_REGIONS: Region[] = [];
+
+/** The active site's regions, for components. */
+export function useRegions(): Region[] {
+  return useAppStore((s) => (s.activeSiteId ? (s.regions[s.activeSiteId] ?? NO_REGIONS) : NO_REGIONS));
+}
+
+/** The active site's raster overlay, if any. */
+export function useOverlay(): OverlayState | null {
+  return useAppStore((s) => (s.activeSiteId ? (s.overlays[s.activeSiteId] ?? null) : null));
+}
 
 /* ----------------------------------------------------------------- import */
 

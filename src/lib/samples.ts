@@ -1,7 +1,8 @@
 /**
  * Sample sites, downloaded on request from the lab's public data release
- * (github.com/McNicol-Lab/wetlsp-sample-data, tag v2): annual phenometrics
- * and spline-smoothed daily EVI only.
+ * (github.com/McNicol-Lab/wetlsp-sample-data; the tag is in sample-index.json).
+ * v2 holds annual phenometrics and spline-smoothed daily EVI; v3 adds the
+ * per-acquisition `raw` EVI.
  *
  * The list of sites and files ships inside the app (`sample-index.json`, written
  * by `npm run samples:publish`), so the "Download sample sites" button shows

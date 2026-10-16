@@ -35,6 +35,7 @@
     "apache-arrow": "^17.0.0",
     "clsx": "^2.1.1",
     "deck.gl": "9.4.0",
+    "geotiff": "3.0.5",
     "h5wasm": "^0.7.8",
     "idb-keyval": "^6.2.1",
     "lucide-react": "^0.460.0",

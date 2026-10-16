@@ -12,8 +12,13 @@
  * means updating that constant too; the script refuses to run otherwise.
  *
  * Before anything is uploaded, every `pixels_timeseries` file is checked to
- * hold only the spline series: raw per-acquisition EVI must never be published
- * (see prepare-samples.mjs).
+ * hold exactly the two series the release documents, raw and spline, and the
+ * build must have held back no site (see prepare-samples.mjs). Pass
+ * --allow-partial to publish without the held-back sites.
+ *
+ * A release tag is never reused for different files: installed apps check
+ * each download against the sizes in their bundled index, so replacing v2's
+ * files would break every older install. New data means a new tag.
  *
  * Each site file becomes one release asset named `<site>--<file>`, plus an
  * `index.json` listing them. The app also bundles a copy of that index
@@ -31,8 +36,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = process.env.SAMPLES_REPO ?? 'McNicol-Lab/wetlsp-sample-data';
-const TAG = process.env.SAMPLES_TAG ?? 'v2';
-const SRC = join(ROOT, 'samples');
+const TAG = process.env.SAMPLES_TAG ?? 'v3';
+const SRC = resolve(ROOT, process.env.SAMPLES_OUT ?? 'samples');
+const ALLOW_PARTIAL = process.argv.includes('--allow-partial');
 const DRY_RUN = process.argv.includes('--dry-run');
 const STAGE_AT = process.argv.includes('--stage') ? process.argv[process.argv.indexOf('--stage') + 1] : null;
 if (process.argv.includes('--stage') && !STAGE_AT) {
@@ -63,17 +69,25 @@ function seriesIn(file) {
 const gh = (...args) => execFileSync('gh', args, { stdio: ['ignore', 'pipe', 'inherit'] }).toString();
 
 const index = JSON.parse(readFileSync(join(SRC, 'index.json'), 'utf8'));
+if (index.heldBack?.length && !ALLOW_PARTIAL) {
+  console.error(
+    `npm run samples held back ${index.heldBack.map((h) => h.siteId).join(', ')}:\n` +
+      index.heldBack.map((h) => `  ${h.siteId}: ${h.problems.join(' ')}`).join('\n') +
+      '\nResolve them (see RELEASE-DIFF.md), or pass --allow-partial to publish the other sites only.',
+  );
+  process.exit(1);
+}
 
 for (const site of index.sites) {
   for (const f of site.files.filter((x) => /pixels_timeseries.*\.parquet$/i.test(x.path))) {
     const series = seriesIn(join(SRC, site.siteId, f.path));
-    if (series.length !== 1 || series[0] !== 'spline') {
-      console.error(`${site.siteId}/${f.path} holds series ${series.join(', ')}. Only spline may be published; run npm run samples.`);
+    if (series.join(',') !== 'raw,spline') {
+      console.error(`${site.siteId}/${f.path} holds series ${series.join(', ')}; the release documents raw and spline. Run npm run samples.`);
       process.exit(1);
     }
   }
 }
-console.log('Checked: every pixels_timeseries file holds only the spline series.');
+console.log('Checked: every pixels_timeseries file holds the raw and spline series.');
 const stage = STAGE_AT ? resolve(STAGE_AT) : join(tmpdir(), `wetlsp-samples-${Date.now()}`);
 if (STAGE_AT) rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
@@ -89,6 +103,10 @@ for (const site of index.sites) {
   }
 }
 const published = { version: 1, repo: REPO, tag: TAG, sites: index.sites };
+if (index.sites.length === 0) {
+  console.error('No sites to publish.');
+  process.exit(1);
+}
 writeFileSync(join(stage, 'index.json'), JSON.stringify(published, null, 2));
 writeFileSync(join(ROOT, 'src/lib/sample-index.json'), `${JSON.stringify(published, null, 2)}\n`);
 if (DRY_RUN) {
@@ -101,8 +119,10 @@ if (DRY_RUN) {
 const NOTES = [
   ...index.sites.map((s) => `- **${s.siteId}**: ${s.name}. ${s.description}`),
   '',
-  'Each site has its annual phenometrics (NetCDF, 2021–2024) and the spline-smoothed daily EVI (parquet). ' +
-    'Per-acquisition (raw) EVI is not distributed, per the NASA CSDA Program EULA for Planet data.',
+  'Each site has its annual phenometrics (NetCDF, 2021–2024) and pixel-level EVI (parquet) in two series: ' +
+    'the spline-smoothed, gap-filled daily EVI (`spline`) and the per-acquisition EVI from each clear PlanetScope ' +
+    'scene (`raw`, new in v3, shared with approval as a derived product). PlanetScope scenes, surface reflectance ' +
+    'bands and quality masks are not included. SHA-256 checksums are listed in index.json.',
   '',
   'This work utilized data made available through the NASA Commercial Satellite Data Acquisition (CSDA) Program. ' +
     'Includes copyrighted material of Planet Labs PBC. All rights reserved.',
@@ -124,7 +144,7 @@ try {
   gh('repo', 'view', REPO);
 } catch {
   gh('repo', 'create', REPO, '--public', '--description',
-    'Sample WetLSP sites (annual phenometrics and spline-smoothed daily EVI) downloaded by WetLSP Explorer');
+    'Sample WetLSP sites (annual phenometrics and pixel-level EVI) downloaded by WetLSP Explorer');
 }
 try {
   gh('release', 'view', TAG, '--repo', REPO);

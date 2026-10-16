@@ -1,6 +1,8 @@
 /**
  * Pixel Map: every pixel of the site on a basemap, with click / rectangle /
- * lasso selection, and a hexbin skyline as the 3D mode.
+ * lasso selection, and a hexbin skyline as the 3D mode. Rectangles and
+ * lassos can instead add regions for comparison, shapefiles add regions
+ * too, and a GeoTIFF or NetCDF can be laid underneath (pixelMapLayers.tsx).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScatterplotLayer } from '@deck.gl/layers';
@@ -8,12 +10,12 @@ import { HexagonLayer } from '@deck.gl/aggregation-layers';
 import type { Layer, PickingInfo } from '@deck.gl/core';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import {
-  Crosshair, Eraser, LassoSelect, MapPin, MousePointer2, Send, Shuffle, Square,
+  Crosshair, Eraser, LassoSelect, MapPin, MousePointer2, Send, Shapes, Shuffle, Square, Upload,
 } from 'lucide-react';
 import { MapCanvas, type MapCanvasHandle } from '@/components/MapCanvas';
 import { Button, Card, Chip, EmptyState, Field, Segmented, Slider } from '@/components/ui';
 import { Sparkline } from '@/components/Sparkline';
-import { useActiveSite, useAppStore } from '@/store/useAppStore';
+import { useActiveSite, useAppStore, useOverlay, useRegions } from '@/store/useAppStore';
 import { ErrorPanel, seriesColor, useAsyncData, useBasemap, useDark } from './shared';
 import { getPixelMeans, getPixelTrace, pixelsInPolygon } from '@/engine/queries';
 import { nearestPixelIndex } from '@/lib/pixelPicking';
@@ -25,8 +27,21 @@ import { FigureMenu } from '@/components/FigureMenu';
 import { formatCount, formatValue, isoFromMs } from '@/lib/format';
 import { MAX_PIXEL_SAMPLE } from '@/engine/sql';
 import type { PixelGeometry } from '@/lib/types';
+import { ringPolygon } from '@/lib/regions';
+import {
+  OverlayCard,
+  RegionsCard,
+  layerTooltip,
+  pickMapLayerFiles,
+  regionLayers,
+  useMapImportQueue,
+  useMapLayerImport,
+  useOverlayLayer,
+} from './pixelMapLayers';
 
 type Tool = 'point' | 'rect' | 'lasso';
+/** What a rectangle or lasso does: replace the selection, or add a region. */
+type ShapeTarget = 'selection' | 'regions';
 
 export function PixelMapView() {
   const site = useActiveSite();
@@ -34,6 +49,7 @@ export function PixelMapView() {
   const basemap = useBasemap();
   const mapRef = useRef<MapCanvasHandle>(null);
   const [tool, setTool] = useState<Tool>('point');
+  const [target, setTarget] = useState<ShapeTarget>('selection');
   const [mode3d, setMode3d] = useState(false);
   // On by default: per-pixel means come from the prepared year tables, so
   // colouring the cloud costs nothing once the site has loaded.
@@ -49,8 +65,14 @@ export function PixelMapView() {
   const setFocusedPixel = useAppStore((s) => s.setFocusedPixel);
   const ts = useAppStore((s) => s.timeseries);
   const toast = useAppStore((s) => s.toast);
+  const addRegions = useAppStore((s) => s.addRegions);
+  const regions = useRegions();
+  const overlay = useOverlay();
+  const overlayLayer = useOverlayLayer();
+  const importBusy = useMapImportQueue((s) => s.busy);
 
   const geometry = site?.geometry ?? null;
+  const importDialog = useMapLayerImport(geometry);
 
   const means = useAsyncData<Map<number, number>>(
     async ({ signal, onProgress }) => {
@@ -97,8 +119,16 @@ export function PixelMapView() {
     return [lo, hi] as [number, number];
   }, [means.data]);
 
+  const regionStack = useMemo(
+    () => (geometry && !mode3d ? regionLayers(regions, geometry, dark) : []),
+    [regions, geometry, dark, mode3d],
+  );
+
   const layers = useMemo<Layer[]>(() => {
     if (!geometry || positions.length === 0) return [];
+    // Bottom to top: raster, region outlines, pixels, region samples, labels.
+    const under = [...(overlayLayer ? [overlayLayer] : []), ...regionStack.slice(0, 1)];
+    const over = regionStack.slice(1);
     const n = geometry.pixelId.length;
     const accent: [number, number, number] = dark ? [45, 212, 191] : [15, 118, 110];
     const secondary: [number, number, number] = dark ? [251, 146, 60] : [234, 88, 12];
@@ -108,6 +138,7 @@ export function PixelMapView() {
       const evi = meanRange ? new Float32Array(n) : null;
       if (evi) for (let i = 0; i < n; i++) evi[i] = means.data?.get(geometry.pixelId[i]) ?? 0;
       return [
+        ...(overlayLayer ? [overlayLayer] : []),
         new HexagonLayer({
           id: 'hex',
           // Aggregation layers read positions through the accessor, not a
@@ -153,6 +184,7 @@ export function PixelMapView() {
     })();
 
     const out: Layer[] = [
+      ...under,
       new ScatterplotLayer({
         id: 'all-pixels',
         data: {
@@ -213,8 +245,8 @@ export function PixelMapView() {
       );
     }
 
-    return out;
-  }, [geometry, positions, selection, plotted, dark, mode3d, hexRadius, colorByEvi, means.data, meanRange, subset, siteSpanMeters]);
+    return [...out, ...over];
+  }, [geometry, positions, selection, plotted, dark, mode3d, hexRadius, colorByEvi, means.data, meanRange, subset, siteSpanMeters, overlayLayer, regionStack]);
 
   const onPick = useCallback(
     (info: PickingInfo) => {
@@ -252,6 +284,18 @@ export function PixelMapView() {
           });
           return;
         }
+        if (target === 'regions') {
+          const drawn = useAppStore.getState().regions[site?.manifest.siteId ?? '']?.filter((r) => r.source === 'drawn').length ?? 0;
+          addRegions([
+            {
+              name: `${tool === 'rect' ? 'Box' : 'Lasso'} ${drawn + 1}`,
+              source: 'drawn',
+              polygons: ringPolygon(ring),
+              pool: inside,
+            },
+          ]);
+          return;
+        }
         selectShape(inside);
       } catch (err) {
         toast({
@@ -261,7 +305,7 @@ export function PixelMapView() {
         });
       }
     },
-    [geometry, selectShape, toast],
+    [geometry, selectShape, toast, target, tool, addRegions, site?.manifest.siteId],
   );
 
   const mapImage = () => {
@@ -322,6 +366,8 @@ export function PixelMapView() {
       onMapReady={setMap}
       onClick={onPick}
       getTooltip={(info) => {
+        const extra = layerTooltip(info, overlay);
+        if (extra) return extra;
         if (info.layer?.id === 'hex') {
           const count = (info.object as { count?: number } | undefined)?.count ?? 0;
           return `<b>${count} pixels</b>${
@@ -343,12 +389,31 @@ export function PixelMapView() {
       className="relative h-full w-full card overflow-hidden"
     >
       <DrawOverlay tool={tool} map={map} onShape={finishShape} />
+      {importDialog}
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
         <div className="pointer-events-auto flex items-center gap-1.5 rounded-[12px] border border-[var(--border)] bg-[var(--bg-elevated)] p-1 shadow-[var(--shadow-card)]">
           <ToolButton icon={MousePointer2} label="Click pixels" active={tool === 'point'} onClick={() => setTool('point')} />
           <ToolButton icon={Square} label="Rectangle" active={tool === 'rect'} onClick={() => setTool('rect')} />
           <ToolButton icon={LassoSelect} label="Lasso" active={tool === 'lasso'} onClick={() => setTool('lasso')} />
+          <div className="mx-0.5 h-5 w-px bg-[var(--border)]" />
+          <Segmented<ShapeTarget>
+            size="sm"
+            value={target}
+            onChange={(v) => {
+              setTarget(v);
+              if (tool === 'point') setTool('rect');
+            }}
+            options={[
+              { value: 'selection', label: 'Select', title: 'Rectangles and lassos replace the selection' },
+              { value: 'regions', label: 'Add region', title: 'Each rectangle or lasso becomes a region to compare' },
+            ]}
+          />
+          <ToolButton
+            icon={Upload}
+            label={importBusy ?? 'Import a shapefile (regions) or a GeoTIFF / NetCDF (overlay)'}
+            onClick={pickMapLayerFiles}
+          />
           <div className="mx-0.5 h-5 w-px bg-[var(--border)]" />
           {canRedraw && (
             <ToolButton
@@ -419,6 +484,13 @@ export function PixelMapView() {
             <span className="tabular-nums">{formatValue(meanRange[1], 2)}</span>
           </Chip>
         )}
+        {regions.length > 0 && !mode3d && (
+          <Chip title="Regions on this site (compared / total)">
+            <Shapes size={11} />
+            {regions.filter((r) => r.enabled).length}/{regions.length} regions
+          </Chip>
+        )}
+        {importBusy && <Chip tone="accent">{importBusy}…</Chip>}
         {mode3d && <Chip>hex radius {hexRadius} m</Chip>}
       </div>
 
@@ -726,6 +798,9 @@ export function PixelMapInspector() {
         </div>
       </Card>
 
+      <RegionsCard />
+      <OverlayCard />
+
       <Card title={focused === null ? 'Pixel detail' : `Pixel ${focused}`}>
         {focused === null ? (
           <p className="text-[12.5px] leading-snug text-[var(--text-muted)]">
@@ -781,6 +856,15 @@ export function PixelMapInspector() {
           <li>
             <LassoSelect size={11} className="mr-1 inline" /> Lasso for irregular shapes; release to
             apply.
+          </li>
+          <li>
+            <Shapes size={11} className="mr-1 inline" /> With <b>Add region</b> on, each rectangle or
+            lasso becomes a new region instead, and Compare plots every region in Time Series.
+          </li>
+          <li>
+            <Upload size={11} className="mr-1 inline" /> Import a shapefile to turn its polygons into
+            regions (a pixel counts when its centre is inside), or a GeoTIFF / NetCDF to lay under the
+            pixels.
           </li>
         </ul>
       </Card>

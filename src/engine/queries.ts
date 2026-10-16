@@ -36,6 +36,8 @@ import type {
 } from '@/lib/types';
 import { WorkerClient } from '@/lib/rpc';
 import type { ReprojectResult } from '@/workers/geo.worker';
+import type { ShapeExtraction } from '@/lib/regions';
+import type { ShapefileParts } from '@/lib/shapefile';
 
 export interface QueryOptions {
   signal?: AbortSignal;
@@ -498,6 +500,18 @@ export async function pixelsInPolygon(
     geometry.pixelId,
     ring,
   ], { signal: opts.signal });
+}
+
+/** The polygons of a shapefile layer that hold this site's pixels, and which pixels. */
+export async function extractShapes(
+  geometry: PixelGeometry,
+  layer: ShapefileParts,
+  opts: QueryOptions = {},
+): Promise<ShapeExtraction> {
+  return geoWorker.call('extractShapes', [layer, geometry.lon, geometry.lat, geometry.pixelId], {
+    signal: opts.signal,
+    onProgress: opts.onProgress,
+  });
 }
 
 /** Forget everything derived from a site's time series: year tables and facts. */

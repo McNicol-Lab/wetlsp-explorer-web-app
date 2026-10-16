@@ -1,3 +1,11 @@
+**New (unreleased): regions, shapefiles and raster overlays.** On the Pixel
+Map, *Add region* turns each box or lasso into a named region, and the upload
+button imports a shapefile (for example a National Wetlands Inventory layer)
+whose polygons become regions. *Compare* plots one mean line and IQR band per
+region in Time Series, with CSV exports per region and the regions as GeoJSON.
+A GeoTIFF or NetCDF raster can be laid under the pixels. The sample-data
+scripts now ship the per-acquisition (raw) EVI for release v3.
+
 **Fixed in v1.2.7: phenometric maps are the right way up.** The WetLSP
 phenometrics files store their rows south to north, and the maps were drawn
 upside down in *Figure*, *Map* and *3D relief*. They now show north at the
