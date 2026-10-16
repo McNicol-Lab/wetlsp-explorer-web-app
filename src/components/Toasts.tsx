@@ -45,6 +45,17 @@ export function Toasts() {
                   {t.detail}
                 </div>
               )}
+              {t.action && (
+                <button
+                  onClick={() => {
+                    dismiss(t.id);
+                    t.action!.run();
+                  }}
+                  className="mt-1.5 text-[12.5px] font-medium text-[var(--accent)] underline underline-offset-2"
+                >
+                  {t.action.label}
+                </button>
+              )}
             </div>
             <button
               onClick={() => dismiss(t.id)}

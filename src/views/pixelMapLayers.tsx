@@ -5,8 +5,7 @@
  * Regions are compared in the Time Series; this file holds their import,
  * their map layers and their inspector cards.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { create } from 'zustand';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BitmapLayer, PolygonLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers';
 import type { Layer, PickingInfo } from '@deck.gl/core';
 import { Download, Eye, EyeOff, Layers, LineChart, Shuffle, Trash2, Upload, X } from 'lucide-react';
@@ -18,6 +17,9 @@ import { isZipPath, listZip, openZipMember } from '@/lib/zip';
 import { groupShapefileParts, type ShapefileParts } from '@/lib/shapefile';
 import {
   MAX_COMPARED_REGIONS,
+  formatBox,
+  isNwiLayer,
+  kmToBox,
   regionDrafts,
   regionsToGeoJson,
   summarizeLayers,
@@ -29,31 +31,15 @@ import { downloadBlob, downloadCsv, timestampedName } from '@/lib/export';
 import { formatCount, formatValue } from '@/lib/format';
 import { pixelIndex } from '@/lib/pixelIndex';
 import type { PixelGeometry } from '@/lib/types';
+import { useMapImportQueue } from '@/lib/mapImport';
+
+export { useMapImportQueue };
 
 /* ---------------------------------------------------------------- files */
 
 const SHAPE_PART = /\.(shp|shx|dbf|prj|cpg)$/i;
 const RASTER = /\.(tiff?|nc4?)$/i;
 const SHAPE_ACCEPT = '.shp,.shx,.dbf,.prj,.cpg,.zip,.tif,.tiff,.nc';
-
-/**
- * True for a drop that is a map layer rather than a WetLSP site: it has a
- * shapefile or a GeoTIFF and no parquet tables. A NetCDF alone stays a site
- * import, since every site folder carries NetCDFs.
- */
-export function isMapLayerDrop(paths: string[]): boolean {
-  if (paths.some((p) => /\.parquet$/i.test(p))) return false;
-  return paths.some((p) => /\.(shp|tiff?)$/i.test(p));
-}
-
-/**
- * Files waiting for the Pixel Map importer (from its toolbar, the inspector
- * or a window-wide drop), and what the importer is busy with.
- */
-export const useMapImportQueue = create<{ files: File[] | null; busy: string | null }>(() => ({
-  files: null,
-  busy: null,
-}));
 
 const setBusy = (busy: string | null) => useMapImportQueue.setState({ busy });
 
@@ -110,6 +96,11 @@ export function useMapLayerImport(geometry: PixelGeometry | null) {
   const setOverlay = useAppStore((s) => s.setOverlay);
   const [pending, setPending] = useState<PendingShapes | null>(null);
   const queued = useMapImportQueue((s) => s.files);
+  const catalog = useAppStore((s) => s.catalog);
+  const catalogIndex = useAppStore((s) => s.catalogIndex);
+  const loadedSites = useAppStore((s) => s.siteOrder);
+  /** The files of the last import, to re-run it on another site. */
+  const lastFiles = useRef<File[]>([]);
 
   const fail = useCallback(
     (title: string, err: unknown) => toast({ kind: 'error', title, detail: err instanceof Error ? err.message : String(err) }),
@@ -146,6 +137,7 @@ export function useMapLayerImport(geometry: PixelGeometry | null) {
         toast({ kind: 'error', title: 'No pixel map', detail: 'This site has no pixel geometry to match layers against.' });
         return;
       }
+      lastFiles.current = files;
       setBusy('Reading files');
       let read: Awaited<ReturnType<typeof readImportFiles>>;
       try {
@@ -185,11 +177,52 @@ export function useMapLayerImport(geometry: PixelGeometry | null) {
       try {
         const out = await extractShapes(geometry, layer);
         if (out.features.length === 0) {
+          // Usually the layer is for another place: say where, and which sites it does cover.
+          const siteId = site.manifest.siteId;
+          const box = out.layerBboxWgs84;
+          let cLon = 0;
+          let cLat = 0;
+          for (let i = 0; i < geometry.lon.length; i++) {
+            cLon += geometry.lon[i];
+            cLat += geometry.lat[i];
+          }
+          const here: [number, number] = [cLon / geometry.lon.length, cLat / geometry.lon.length];
+          const km = kmToBox(here, box);
+          const inside = catalog.filter(
+            (c) => c.lon !== undefined && c.lat !== undefined && kmToBox([c.lon, c.lat], box) === 0,
+          );
+          const loaded = inside.find((c) => loadedSites.includes(c.site_id) && c.site_id !== siteId);
+          const country = catalogIndex.get(siteId)?.country;
+          const nwi = isNwiLayer(out.fields);
+          const files = lastFiles.current;
           toast({
             kind: 'warning',
-            title: `No ${layer.name} polygon covers ${site.manifest.siteId}`,
-            detail: `${formatCount(out.totalFeatures)} polygons read (${out.crsName ?? 'CRS unknown'}); none holds a pixel centre. Check that the layer covers this site.`,
-            ttl: 10000,
+            title: `${layer.name} does not reach ${siteId}`,
+            detail: [
+              km > 0
+                ? `The layer covers ${formatBox(box)}, about ${formatCount(Math.round(km))} km from ${siteId}.`
+                : `The layer's extent includes ${siteId}, but none of its ${formatCount(out.totalFeatures)} polygons holds a pixel centre (a gap between polygons).`,
+              km > 0 && inside.length
+                ? `WetLSP sites inside it: ${inside.slice(0, 4).map((c) => c.site_id).join(', ')}${inside.length > 4 ? ` and ${inside.length - 4} more` : ''}.`
+                : '',
+              nwi && country && country !== 'United States'
+                ? `The National Wetlands Inventory maps the United States only, so it has no layer for ${siteId} (${country}).`
+                : nwi && km > 0
+                  ? `Download the NWI layer for ${siteId}'s watershed from fws.gov/wetlands/data.`
+                  : '',
+            ]
+              .filter(Boolean)
+              .join(' '),
+            ttl: 0,
+            action: loaded
+              ? {
+                  label: `Open ${loaded.site_id} and import there`,
+                  run: () => {
+                    void useAppStore.getState().selectSite(loaded.site_id);
+                    useMapImportQueue.setState({ files });
+                  },
+                }
+              : undefined,
           });
           return;
         }
@@ -221,7 +254,7 @@ export function useMapLayerImport(geometry: PixelGeometry | null) {
         setBusy(null);
       }
     },
-    [pending, geometry, site, addRegions, toast, fail],
+    [pending, geometry, site, addRegions, toast, fail, catalog, catalogIndex, loadedSites],
   );
 
   return pending ? (
