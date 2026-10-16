@@ -30,6 +30,7 @@ import {
 import { indexCatalog, loadCatalog } from '@/lib/catalog';
 import { expandArchives, ingestEntries, type IngestEntry } from '@/lib/ingest';
 import { splitSites } from '@/lib/detect';
+import { entriesToFiles, isMapLayersOnly, mapLayerEntries, useMapImportQueue } from '@/lib/mapImport';
 import { sampleEntries, sampleSites, type SampleSite } from '@/lib/samples';
 import { formatBytes, formatCount } from '@/lib/format';
 import {
@@ -443,10 +444,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   async importEntries(entries, folderHint) {
     if (entries.length === 0 || get().ingest.active) return;
     let jobs: ImportJob[];
+    let pendingLayers: IngestEntry[] | null = null;
     try {
       set({ ingest: { ...IDLE_INGEST, active: true, progress: { phase: 'Reading the folder', fraction: null } } });
       const expanded = await expandArchives(entries);
-      jobs = splitSites(expanded).map((g) => ({ entries: g.files, hint: g.hint ?? folderHint }));
+      // Shapefiles and rasters are layers for a site's Pixel Map, not sites.
+      // Hand them over instead of failing with "No WetLSP data found".
+      const layers = mapLayerEntries(expanded);
+      if (layers.length && isMapLayersOnly(expanded)) {
+        set({ ingest: IDLE_INGEST });
+        if (!get().activeSiteId) {
+          get().toast({
+            kind: 'error',
+            title: 'Open a site first',
+            detail: 'Shapefiles and rasters are laid over a site’s pixels on the Pixel Map. Import or download a site, then add them.',
+          });
+          return;
+        }
+        useMapImportQueue.setState({ files: await entriesToFiles(layers) });
+        get().setView('pixelmap');
+        return;
+      }
+      if (layers.length) pendingLayers = layers;
+      jobs = splitSites(expanded.filter((e) => !layers.includes(e))).map((g) => ({ entries: g.files, hint: g.hint ?? folderHint }));
     } catch (err) {
       set({ ingest: IDLE_INGEST });
       get().toast({
@@ -457,6 +477,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
     await runImport(jobs);
+    // Map layers that came with the sites: over the first imported site's pixels.
+    if (pendingLayers && get().activeSiteId) {
+      useMapImportQueue.setState({ files: await entriesToFiles(pendingLayers) });
+      get().setView('pixelmap');
+    }
   },
 
   async installSamples(siteIds) {

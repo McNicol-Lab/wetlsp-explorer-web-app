@@ -6,7 +6,6 @@
  * their map layers and their inspector cards.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { create } from 'zustand';
 import { BitmapLayer, PolygonLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers';
 import type { Layer, PickingInfo } from '@deck.gl/core';
 import { Download, Eye, EyeOff, Layers, LineChart, Shuffle, Trash2, Upload, X } from 'lucide-react';
@@ -29,31 +28,15 @@ import { downloadBlob, downloadCsv, timestampedName } from '@/lib/export';
 import { formatCount, formatValue } from '@/lib/format';
 import { pixelIndex } from '@/lib/pixelIndex';
 import type { PixelGeometry } from '@/lib/types';
+import { useMapImportQueue } from '@/lib/mapImport';
+
+export { useMapImportQueue };
 
 /* ---------------------------------------------------------------- files */
 
 const SHAPE_PART = /\.(shp|shx|dbf|prj|cpg)$/i;
 const RASTER = /\.(tiff?|nc4?)$/i;
 const SHAPE_ACCEPT = '.shp,.shx,.dbf,.prj,.cpg,.zip,.tif,.tiff,.nc';
-
-/**
- * True for a drop that is a map layer rather than a WetLSP site: it has a
- * shapefile or a GeoTIFF and no parquet tables. A NetCDF alone stays a site
- * import, since every site folder carries NetCDFs.
- */
-export function isMapLayerDrop(paths: string[]): boolean {
-  if (paths.some((p) => /\.parquet$/i.test(p))) return false;
-  return paths.some((p) => /\.(shp|tiff?)$/i.test(p));
-}
-
-/**
- * Files waiting for the Pixel Map importer (from its toolbar, the inspector
- * or a window-wide drop), and what the importer is busy with.
- */
-export const useMapImportQueue = create<{ files: File[] | null; busy: string | null }>(() => ({
-  files: null,
-  busy: null,
-}));
 
 const setBusy = (busy: string | null) => useMapImportQueue.setState({ busy });
 

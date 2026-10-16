@@ -354,7 +354,7 @@ export function manifestFromDetection(d: DetectionResult): SiteManifest {
 /* ------------------------------------------------------- multi-site input */
 
 /** True for a file that belongs to a WetLSP site (not a readme or stray file). */
-function isSiteData(path: string): boolean {
+export function isSiteData(path: string): boolean {
   const ext = extension(path);
   if (ext === 'nc' || ext === 'nc4' || ext === 'netcdf') return parseNetcdfName(path).year !== null;
   if (ext !== 'parquet') return false;
