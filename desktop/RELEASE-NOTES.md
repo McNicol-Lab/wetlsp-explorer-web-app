@@ -1,10 +1,21 @@
-**New (unreleased): regions, shapefiles and raster overlays.** On the Pixel
-Map, *Add region* turns each box or lasso into a named region, and the upload
-button imports a shapefile (for example a National Wetlands Inventory layer)
-whose polygons become regions. *Compare* plots one mean line and IQR band per
-region in Time Series, with CSV exports per region and the regions as GeoJSON.
-A GeoTIFF or NetCDF raster can be laid under the pixels. The sample-data
-scripts now ship the per-acquisition (raw) EVI for release v3.
+**New in v1.3.0: compare regions, import shapefiles, overlay rasters.**
+
+- *Regions.* On the Pixel Map, switch the toolbar to *Add region* and drag
+  boxes or lassos: each becomes a named, coloured region.
+- *Shapefiles.* The upload button (or *Open dataset*, or a drop onto the
+  window) imports a shapefile, such as a National Wetlands Inventory
+  download. Each polygon that holds pixels becomes a region, named from its
+  attributes (e.g. `PEM1Cm`). Polygons can be pooled by an attribute. Any
+  projection with a `.prj` works. If the layer is for another place, the app
+  says where it is and offers to open a site it covers.
+- *Compare.* One mean line and IQR band per region in Time Series, in the
+  region's map colour, with green-up, peak and green-down per region. Export
+  the daily mean and IQR or every observation per region as CSV, and the
+  regions as GeoJSON.
+- *Raster overlay.* Lay a GeoTIFF or NetCDF-4 grid under the pixels; pick the
+  band or variable, colours and opacity, and hover to read values.
+- The sample-data scripts can ship the per-acquisition (raw) EVI, for sample
+  release v3. Download sample sites still uses v2 until v3 is published.
 
 **Fixed in v1.2.7: phenometric maps are the right way up.** The WetLSP
 phenometrics files store their rows south to north, and the maps were drawn
