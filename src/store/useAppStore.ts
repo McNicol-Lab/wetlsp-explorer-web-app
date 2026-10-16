@@ -59,6 +59,8 @@ export interface Toast {
   detail?: string;
   /** Milliseconds; 0 keeps it until dismissed. */
   ttl: number;
+  /** One button, e.g. "Open US-Myb"; the toast closes after it runs. */
+  action?: { label: string; run: () => void };
 }
 
 export interface SiteState {

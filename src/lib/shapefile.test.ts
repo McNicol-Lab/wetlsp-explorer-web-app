@@ -8,7 +8,7 @@ import {
   ringTester,
   signedArea2,
 } from './shapefile';
-import { extractShapeRegions, regionDrafts, regionsToGeoJson, ringPolygon } from './regions';
+import { extractShapeRegions, formatBox, isNwiLayer, kmToBox, regionDrafts, regionsToGeoJson, ringPolygon } from './regions';
 
 /* ------------------------------------------------- tiny shapefile writer */
 
@@ -312,5 +312,26 @@ describe('extractShapeRegions', () => {
     expect(json.features[0].geometry.coordinates[0]).toEqual([[0, 0], [1, 0], [1, 1], [0, 0]]);
     expect(json.features[1].geometry.type).toBe('MultiPolygon');
     expect(json.features[1].properties).toMatchObject({ region_id: 'r2', site_id: 'US-Myb', pixels_in_region: 2 });
+  });
+});
+
+describe('where a layer is', () => {
+  // NWI HU8_18020163 (around US-Myb) and CA-DSM's tower, from the catalog.
+  const hu8: [number, number, number, number] = [-122.25, 38.01, -121.33, 38.76];
+
+  it('measures the distance from a site to a layer, zero inside it', () => {
+    expect(kmToBox([-121.765, 38.0499], hu8)).toBe(0);
+    // pyproj's WGS84 geodesic to the box's nearest corner is 1,148.8 km; a sphere is within 0.1%.
+    expect(Math.abs(kmToBox([-122.8954, 49.0887], hu8) - 1148.8)).toBeLessThan(2);
+  });
+
+  it('writes the extent in degrees with hemispheres', () => {
+    expect(formatBox(hu8)).toBe('38.01–38.76°N, 121.33–122.25°W');
+    expect(formatBox([-0.5, -1, 0.5, 1])).toBe('1.00°S–1.00°N, 0.50°W–0.50°E');
+  });
+
+  it('recognises NWI layers by their attribute fields', () => {
+    expect(isNwiLayer(['ATTRIBUTE', 'WETLAND_TY', 'ACRES'])).toBe(true);
+    expect(isNwiLayer(['NAME'])).toBe(false);
   });
 });

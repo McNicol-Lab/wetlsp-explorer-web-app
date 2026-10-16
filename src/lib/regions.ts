@@ -70,6 +70,8 @@ export interface ShapeExtraction {
   totalFeatures: number;
   /** Features whose bounding box overlaps the site. */
   nearSite: number;
+  /** The whole layer's extent in lon/lat: [west, south, east, north]. */
+  layerBboxWgs84: [number, number, number, number];
   features: ShapeFeature[];
   /** Pixels inside at least one feature. */
   pixelsCovered: number;
@@ -215,8 +217,18 @@ export function extractShapeRegions(
 
   let pixelsCovered = 0;
   for (let i = 0; i < n; i++) pixelsCovered += covered[i];
+  // Edges and corners, since a projected box is not a lon/lat box.
+  const [hx0, hy0, hx1, hy1] = header.bbox;
+  const ring = [0, 0.5, 1].flatMap((u) => [0, 0.5, 1].map((v) => tr.toWgs84(hx0 + (hx1 - hx0) * u, hy0 + (hy1 - hy0) * v)));
+  const layerBboxWgs84: [number, number, number, number] = [
+    Math.min(...ring.map((p) => p[0])),
+    Math.min(...ring.map((p) => p[1])),
+    Math.max(...ring.map((p) => p[0])),
+    Math.max(...ring.map((p) => p[1])),
+  ];
   return {
     layer: parts.name,
+    layerBboxWgs84,
     crsName: tr.name,
     assumedWgs84,
     fields: dbf?.fields.map((f) => f.name) ?? [],
@@ -225,6 +237,35 @@ export function extractShapeRegions(
     features,
     pixelsCovered,
   };
+}
+
+/* ------------------------------------------------------------- location */
+
+/** Kilometres from a point to the nearest edge of a lon/lat box (0 inside it). */
+export function kmToBox([lon, lat]: [number, number], [w, s, e, n]: [number, number, number, number]): number {
+  const cLon = Math.min(e, Math.max(w, lon));
+  const cLat = Math.min(n, Math.max(s, lat));
+  const k = Math.PI / 180;
+  const a =
+    Math.sin(((cLat - lat) * k) / 2) ** 2 + Math.cos(lat * k) * Math.cos(cLat * k) * Math.sin(((cLon - lon) * k) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/** `38.01–38.76°N, 121.33–122.25°W` (each range written low to high in magnitude). */
+export function formatBox([w, s, e, n]: [number, number, number, number]): string {
+  const range = (a: number, b: number, pos: string, neg: string) => {
+    if (a >= 0 === b >= 0) {
+      const [lo, hi] = [Math.abs(a), Math.abs(b)].sort((x, y) => x - y);
+      return `${lo.toFixed(2)}–${hi.toFixed(2)}°${a >= 0 ? pos : neg}`;
+    }
+    return `${Math.abs(a).toFixed(2)}°${neg}–${b.toFixed(2)}°${pos}`;
+  };
+  return `${range(s, n, 'N', 'S')}, ${range(w, e, 'E', 'W')}`;
+}
+
+/** True for a National Wetlands Inventory layer (its standard attribute fields). */
+export function isNwiLayer(fields: string[]): boolean {
+  return fields.includes('ATTRIBUTE') && fields.includes('WETLAND_TY');
 }
 
 /* --------------------------------------------------------------- naming */
