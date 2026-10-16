@@ -5,6 +5,8 @@
  */
 import { serve, type HandlerContext } from '@/lib/rpc';
 import { reprojectMany, type CrsResolution } from '@/lib/crs';
+import { extractShapeRegions, type ShapeExtraction } from '@/lib/regions';
+import type { ShapefileParts } from '@/lib/shapefile';
 
 export interface ReprojectResult {
   lon: Float64Array;
@@ -88,6 +90,18 @@ const handlers = {
     }
 
     return Int32Array.from(hits);
+  },
+
+  /** The polygons of one shapefile layer that hold site pixels (lib/regions.ts). */
+  async extractShapes(
+    ctx: HandlerContext,
+    layer: ShapefileParts,
+    lon: Float64Array,
+    lat: Float64Array,
+    pixelId: Int32Array,
+  ): Promise<ShapeExtraction> {
+    ctx.progress({ phase: 'Matching polygons to pixels', fraction: null, detail: layer.name });
+    return extractShapeRegions(layer, { lon, lat, pixelId }, () => ctx.throwIfCancelled());
   },
 };
 

@@ -6,11 +6,14 @@
  *
  * The aggregates come back from SQL already reduced to one row per date x
  * series, so the band costs the same whether it summarises 250 pixels or 5000.
+ *
+ * "Compare regions" swaps the single pixel set for the Pixel Map's regions:
+ * one mean and band per region (regionCompare.tsx).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import type { PlotData } from 'plotly.js-dist-min';
-import { Boxes, FileImage, LineChart, Presentation, RefreshCw, Shuffle, Table } from 'lucide-react';
+import { Boxes, FileImage, LineChart, Presentation, RefreshCw, Shapes, Shuffle, Table } from 'lucide-react';
 import {
   MODEBAR_BAND,
   PLOT_CONFIG,
@@ -38,6 +41,17 @@ import { newSeed } from '@/lib/sampling';
 import type { DailySummaryRow } from '@/lib/types';
 import { pixelLines, type PixelLine } from './timeseriesPlot';
 import { keyDates, type KeyDates } from './keyDates';
+import {
+  RegionSeasonCard,
+  buildRegionTraces,
+  describeRegions,
+  exportRegionObservations,
+  exportRegionSummary,
+  useComparedRegions,
+  useRegionResults,
+  useRegionsData,
+  type RegionsLoaded,
+} from './regionCompare';
 
 interface Loaded {
   bundle: TimeseriesBundle;
@@ -101,7 +115,8 @@ function useTimeseriesData() {
   const rangeKey = ts.dateRange ? ts.dateRange.join('..') : '';
 
   const enabled = Boolean(
-    manifest?.timeseries && year !== null && ts.series.length > 0 && ts.chart !== 'years',
+    manifest?.timeseries && year !== null && ts.series.length > 0 && ts.chart !== 'years' &&
+      !(ts.compareRegions && ts.chart === 'line'),
   );
 
   return useAsyncData<Loaded>(
@@ -201,8 +216,13 @@ export function TimeSeriesView() {
   const chartRef = useRef<PlotlyHandle>(null);
   const lineState = useTimeseriesData();
   const yearsState = useYearsData();
+  const regionsState = useRegionsData();
   const chart = ts.chart;
-  const state = chart === 'years' ? yearsState : lineState;
+  const comparing = ts.compareRegions && chart === 'line';
+  const state = comparing ? regionsState : chart === 'years' ? yearsState : lineState;
+  useEffect(() => {
+    useRegionResults.setState({ loaded: comparing ? regionsState.data : null });
+  }, [comparing, regionsState.data]);
 
   const kd = useKeyDates(lineState.data?.summary, ts.series);
   useEffect(() => {
@@ -222,6 +242,9 @@ export function TimeSeriesView() {
   );
 
   const traces = useMemo<PlotData[]>(() => {
+    if (comparing) {
+      return regionsState.data ? buildRegionTraces(regionsState.data, { showMean: ts.showMean, showIqr: ts.showIqr }) : [];
+    }
     if (chart === 'years') return yearsState.data ? buildYearTraces(yearsState.data, ts.series, dark) : [];
     if (!lineState.data) return [];
     if (chart === '3d') return build3dTraces(lineState.data.bundle, dark);
@@ -233,7 +256,7 @@ export function TimeSeriesView() {
       showMean: ts.showMean,
       showIqr: ts.showIqr,
     });
-  }, [chart, yearsState.data, lineState.data, ts.series, dark, pixelPlot, individual, ts.showMean, ts.showIqr]);
+  }, [chart, yearsState.data, lineState.data, ts.series, dark, pixelPlot, individual, ts.showMean, ts.showIqr, comparing, regionsState.data]);
 
   const layout = useMemo(() => {
     const base = plotTheme(dark);
@@ -251,7 +274,7 @@ export function TimeSeriesView() {
         showlegend: false,
       };
     }
-    const markers = chart === 'line' && ts.showKeyDates && ts.showMean && kd ? keyDateMarkers(kd, dark) : null;
+    const markers = chart === 'line' && !comparing && ts.showKeyDates && ts.showMean && kd ? keyDateMarkers(kd, dark) : null;
     return {
       ...base,
       hovermode: 'x unified',
@@ -264,13 +287,19 @@ export function TimeSeriesView() {
       yaxis: { ...(base.yaxis as object), title: { text: 'EVI' } },
       ...(markers ?? {}),
     };
-  }, [dark, chart, ts.showKeyDates, ts.showMean, kd]);
+  }, [dark, chart, ts.showKeyDates, ts.showMean, kd, comparing]);
 
   const siteId = site?.manifest.siteId ?? '';
   const siteName = catalogIndex.get(siteId)?.site_name;
 
   /** What the figure shows, in words: shared by the export title and the caption. */
   const describe = useCallback((): { title: string; subtitle: string; caption: string } | null => {
+    if (comparing) {
+      const d = regionsState.data;
+      if (!d) return null;
+      const range = ts.dateRange ? `${ts.dateRange[0]} to ${ts.dateRange[1]}` : `${d.year}`;
+      return describeRegions(d, { siteId, siteName, range });
+    }
     // Name what is drawn, not what the filters ask for: a reload may still be running.
     const drawn =
       chart === 'years'
@@ -319,7 +348,7 @@ export function TimeSeriesView() {
         `for ${sample}${layers.length && chart !== '3d' ? `, showing ${layers.join(', ')}` : ''}.${kdText} ` +
         'Source: WetLSP pixels_timeseries.',
     };
-  }, [chart, yearsState.data, lineState.data, ts, siteId, siteName, individual, kd]);
+  }, [chart, yearsState.data, lineState.data, ts, siteId, siteName, individual, kd, comparing, regionsState.data]);
 
   if (!site) {
     return (
@@ -352,7 +381,8 @@ export function TimeSeriesView() {
           <Segmented<TimeseriesChart>
             size="sm"
             value={chart}
-            onChange={(v) => update({ chart: v })}
+            // Region comparison is a line chart; another chart type leaves it.
+            onChange={(v) => update(v === 'line' ? { chart: v } : { chart: v, compareRegions: false })}
             options={[
               { value: 'line', label: 'Line', title: 'Daily mean, IQR band and key dates' },
               { value: 'years', label: 'Compare years', title: 'Each year’s daily mean on one calendar' },
@@ -363,18 +393,27 @@ export function TimeSeriesView() {
             <div className="flex items-center gap-1" role="group" aria-label="Chart layers">
               <LayerChip on={ts.showMean} onClick={() => update({ showMean: !ts.showMean })} label="Mean" />
               <LayerChip on={ts.showIqr} onClick={() => update({ showIqr: !ts.showIqr })} label="IQR band" />
-              <LayerChip
-                on={ts.showPixels}
-                onClick={() => update({ showPixels: !ts.showPixels })}
-                label="Pixels"
-                title={individual ? 'Selected pixels are already drawn individually' : 'Every sampled pixel as a thin line'}
-              />
-              <LayerChip
-                on={ts.showKeyDates}
-                onClick={() => update({ showKeyDates: !ts.showKeyDates })}
-                label="Key dates"
-                title="Green-up, peak and green-down estimated from the mean line"
-              />
+              {!comparing && (
+                <>
+                  <LayerChip
+                    on={ts.showPixels}
+                    onClick={() => update({ showPixels: !ts.showPixels })}
+                    label="Pixels"
+                    title={individual ? 'Selected pixels are already drawn individually' : 'Every sampled pixel as a thin line'}
+                  />
+                  <LayerChip
+                    on={ts.showKeyDates}
+                    onClick={() => update({ showKeyDates: !ts.showKeyDates })}
+                    label="Key dates"
+                    title="Green-up, peak and green-down estimated from the mean line"
+                  />
+                </>
+              )}
+              {comparing && (
+                <Chip tone="accent" title="Each line is one region from the Pixel Map">
+                  <Shapes size={11} /> {regionsState.data?.regions.length ?? '…'} regions
+                </Chip>
+              )}
             </div>
           )}
           {state.loading && (
@@ -386,6 +425,7 @@ export function TimeSeriesView() {
         </div>
         <ExportButtons
           chart={chart}
+          regionsData={comparing ? regionsState.data : null}
           lineData={lineState.data}
           ready={Boolean(state.data)}
           chartRef={chartRef}
@@ -408,7 +448,7 @@ export function TimeSeriesView() {
           <EmptyState
             icon={<LineChart size={24} />}
             title="Nothing plotted yet"
-            body="Choose a year and a series in the inspector."
+            body={comparing ? 'Turn on regions in the Pixel Map inspector.' : 'Choose a year and a series in the inspector.'}
           />
         ) : (
           <PlotlyChart
@@ -421,7 +461,7 @@ export function TimeSeriesView() {
         )}
       </div>
 
-      <StatusFooter chart={chart} lineState={lineState} yearsState={yearsState} />
+      <StatusFooter chart={chart} lineState={lineState} yearsState={yearsState} regionsState={comparing ? regionsState : null} />
     </div>
   );
 }
@@ -698,15 +738,25 @@ function StatusFooter({
   chart,
   lineState,
   yearsState,
+  regionsState,
 }: {
   chart: TimeseriesChart;
   lineState: ReturnType<typeof useTimeseriesData>;
   yearsState: ReturnType<typeof useYearsData>;
+  regionsState: ReturnType<typeof useRegionsData> | null;
 }) {
   const parts: string[] = [];
   let sampled = false;
-  const state = chart === 'years' ? yearsState : lineState;
-  if (chart === 'years' && yearsState.data) {
+  const state = regionsState ?? (chart === 'years' ? yearsState : lineState);
+  if (regionsState) {
+    const d = regionsState.data;
+    if (d) {
+      parts.push(`${d.regions.length} regions`);
+      parts.push(`${formatCount(d.regions.reduce((n, r) => n + r.sampleSize, 0))} pixels plotted`);
+      const big = d.regions.filter((r) => r.sampleSize < r.poolSize).length;
+      if (big) parts.push(`${big} sampled at random`);
+    }
+  } else if (chart === 'years' && yearsState.data) {
     const d = yearsState.data;
     parts.push(`${d.years.length} years`);
     parts.push(d.usedSelection ? `${formatCount(d.pixels)} selected pixels` : `${formatCount(d.pixels)} of ${formatCount(d.availablePixels)} pixels sampled`);
@@ -741,12 +791,14 @@ function StatusFooter({
 
 function ExportButtons({
   chart,
+  regionsData,
   lineData,
   ready,
   chartRef,
   describe,
 }: {
   chart: TimeseriesChart;
+  regionsData: RegionsLoaded | null;
   lineData: Loaded | null;
   ready: boolean;
   chartRef: React.RefObject<PlotlyHandle | null>;
@@ -754,15 +806,17 @@ function ExportButtons({
 }) {
   const site = useActiveSite();
   const ts = useAppStore((s) => s.timeseries);
+  const toast = useAppStore((s) => s.toast);
+  const compared = useComparedRegions();
   const d = lineData;
 
   const baseName = useCallback(
     (ext: string, extra?: string) =>
       timestampedName(
-        [site?.manifest.siteId, 'evi', chart === 'years' ? 'years' : ts.year, ts.series.join('-'), extra],
+        [site?.manifest.siteId, 'evi', regionsData ? 'regions' : null, chart === 'years' ? 'years' : ts.year, ts.series.join('-'), extra],
         ext,
       ),
-    [site, chart, ts.year, ts.series],
+    [site, chart, ts.year, ts.series, regionsData],
   );
 
   const render = useCallback(
@@ -832,7 +886,28 @@ function ExportButtons({
           icon: <Presentation size={13} />,
           run: async () => downloadBlob(await render({ width: 1920, height: 1080, scale: 1 }), baseName('png', 'slide')),
         },
-        ...(chart !== 'years'
+        ...(regionsData
+          ? [
+              {
+                label: 'Daily mean + IQR by region',
+                hint: 'CSV',
+                icon: <Table size={13} />,
+                run: () => exportRegionSummary(regionsData, site?.manifest.siteId ?? 'site'),
+              },
+              {
+                label: 'Every observation by region',
+                hint: 'CSV',
+                icon: <Boxes size={13} />,
+                run: () =>
+                  void exportRegionObservations(regionsData, compared, {
+                    siteId: site?.manifest.siteId ?? '',
+                    dateRange: ts.dateRange,
+                  }).catch((err) =>
+                    toast({ kind: 'error', title: 'Export failed', detail: err instanceof Error ? err.message : String(err) }),
+                  ),
+              },
+            ]
+          : chart !== 'years'
           ? [
               { label: 'Daily mean + IQR', hint: 'CSV', icon: <Table size={13} />, run: exportSummary, disabled: !d },
               { label: 'Every pixel observation', hint: 'CSV', icon: <Boxes size={13} />, run: exportRows, disabled: !d },
@@ -890,6 +965,7 @@ export function TimeSeriesInspector() {
   const update = useAppStore((s) => s.updateTimeseries);
   const selection = useAppStore((s) => s.selection);
   const setView = useAppStore((s) => s.setView);
+  const compared = useComparedRegions();
   const [pixelDraft, setPixelDraft] = useState<number | null>(null);
 
   if (!site?.facts) {
@@ -978,7 +1054,7 @@ export function TimeSeriesInspector() {
               max={MAX_PIXEL_SAMPLE}
               step={25}
               value={draft}
-              disabled={ts.useSelection}
+              disabled={ts.useSelection || ts.compareRegions}
               onChange={(v) => setPixelDraft(v)}
             />
             <div className="flex items-center justify-between pt-1">
@@ -1041,7 +1117,7 @@ export function TimeSeriesInspector() {
       <Card title="Pixel source">
         <Toggle
           checked={ts.useSelection}
-          onChange={(v) => update({ useSelection: v })}
+          onChange={(v) => update({ useSelection: v, ...(v ? { compareRegions: false } : {}) })}
           label="Use the map selection"
           hint={
             selection.length
@@ -1050,7 +1126,18 @@ export function TimeSeriesInspector() {
           }
           disabled={selection.length === 0 && !ts.useSelection}
         />
-        {!ts.useSelection && (
+        <Toggle
+          checked={ts.compareRegions}
+          onChange={(v) => update({ compareRegions: v, ...(v ? { useSelection: false, chart: 'line' as const } : {}) })}
+          label="Compare regions"
+          hint={
+            compared.length
+              ? `${compared.length} region${compared.length === 1 ? '' : 's'} switched on`
+              : 'No regions yet'
+          }
+          disabled={compared.length === 0 && !ts.compareRegions}
+        />
+        {!ts.useSelection && !ts.compareRegions && (
           <Button
             size="sm"
             className="mt-2 w-full"
@@ -1071,7 +1158,7 @@ export function TimeSeriesInspector() {
         )}
       </Card>
 
-      {ts.chart === 'line' && <SeasonCard />}
+      {ts.chart === 'line' && (ts.compareRegions ? <RegionSeasonCard /> : <SeasonCard />)}
 
       <Card title="How to read it">
         <ul className="space-y-1.5 text-[12px] leading-snug text-[var(--text-muted)]">
@@ -1085,7 +1172,14 @@ export function TimeSeriesInspector() {
             Key dates mark the peak and where the mean crosses half its seasonal amplitude. They are
             a quick reading of the line; the Phenometrics layers hold the reference values.
           </li>
-          <li>spline is gap-filled daily EVI; raw is the observed, sparser record.</li>
+          <li>
+            Compare regions draws one mean and band per Pixel Map region, in its map colour; n is
+            how many of its pixels have data.
+          </li>
+          <li>
+            spline is gap-filled, smoothed daily EVI. raw is EVI from each clear PlanetScope
+            acquisition: sparser, unsmoothed and noisier, drawn as points.
+          </li>
         </ul>
       </Card>
     </div>

@@ -45,6 +45,10 @@ export function crsNameFromWkt(wkt: string): string | null {
 /** proj4 string for the EPSG codes that WetLSP exports actually use. */
 export function proj4DefForEpsg(code: number): string | null {
   if (code === 4326) return '+proj=longlat +datum=WGS84 +no_defs';
+  if (code === 4269) return '+proj=longlat +datum=NAD83 +no_defs';
+  // NAD83 / Conus Albers: USGS and NWI national products.
+  if (code === 5070)
+    return '+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5 +lat_2=45.5 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs';
   if (code === 3857)
     return '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +no_defs';
 
@@ -177,4 +181,54 @@ export function reprojectMany(
     lat[i] = la;
   }
   return { lon, lat, resolution };
+}
+
+export interface LayerTransform {
+  name: string | null;
+  epsg: number | null;
+  /** True when the layer is in degrees, so no projection is involved. */
+  geographic: boolean;
+  toWgs84(x: number, y: number): [number, number];
+  fromWgs84(lon: number, lat: number): [number, number];
+}
+
+/**
+ * Transform for an imported layer (a shapefile `.prj`, a GeoTIFF's EPSG code,
+ * a NetCDF `spatial_ref`). Unlike `resolveCrs`, any projection proj4
+ * understands is accepted, not only the UTM family WetLSP sites use: the
+ * National Wetlands Inventory ships Albers Equal Area in ESRI WKT with no
+ * EPSG id. `what` names the source in error messages.
+ */
+export function layerTransform(crs: string | number | null | undefined, what: string): LayerTransform {
+  if (crs === null || crs === undefined || (typeof crs === 'string' && !crs.trim())) {
+    throw new Error(`${what} has no coordinate reference system.`);
+  }
+  const epsg = typeof crs === 'number' ? crs : epsgFromWkt(crs);
+  const candidates = [
+    epsg !== null ? proj4DefForEpsg(epsg) : null,
+    typeof crs === 'string' ? crs : null,
+    typeof crs === 'string' ? tmercDefFromWkt(crs) : null,
+  ].filter((d): d is string => Boolean(d));
+  for (const def of candidates) {
+    let tr: proj4.Converter;
+    try {
+      tr = proj4(def, WGS84);
+      const probe = tr.inverse([-96, 40]);
+      if (!probe.every(Number.isFinite)) continue;
+    } catch {
+      continue;
+    }
+    const geographic = /^\s*(GEOGCS|GEOGCRS)\b|\+proj=longlat/i.test(def);
+    return {
+      name: typeof crs === 'string' ? crsNameFromWkt(crs) : `EPSG:${crs}`,
+      epsg,
+      geographic,
+      toWgs84: (x, y) => tr.forward([x, y]) as [number, number],
+      fromWgs84: (lon, lat) => tr.inverse([lon, lat]) as [number, number],
+    };
+  }
+  throw new Error(
+    `${what} uses a coordinate reference system this app cannot interpret${epsg ? ` (EPSG:${epsg})` : ''}. ` +
+      'Reproject it to WGS 84 (EPSG:4326) or UTM in QGIS and import it again.',
+  );
 }

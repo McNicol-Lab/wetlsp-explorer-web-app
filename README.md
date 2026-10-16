@@ -76,8 +76,8 @@ files. Both single-file and batched `_ds` datasets work.
 | View | Use it to |
 | --- | --- |
 | **Overview** | Locate a site; check its dates, pixel coverage, years, and metadata. |
-| **Time Series** | Line chart of daily mean EVI with its interquartile band and estimated green-up, peak and green-down dates; overlay years; show every pixel; export results. |
-| **Pixel Map** | Select pixels or draw a region, then inspect that selection's time series. |
+| **Time Series** | Line chart of daily mean EVI with its interquartile band and estimated green-up, peak and green-down dates; overlay years; show every pixel; compare regions; export results. |
+| **Pixel Map** | Select pixels, draw regions or import them from a shapefile, lay a GeoTIFF or NetCDF underneath, then inspect the time series. |
 | **Phenometrics** | Examine timing, greenness, and quality layers; compare up to four site-years. |
 | **Catalog** | Search the bundled 95-site catalog and export site information. |
 
@@ -96,6 +96,29 @@ Imported data can use up to **50 GB**, or less if your disk has less free
 space. When an import would go over, the app asks you to delete a site first.
 Manage sites in **Settings → Storage**. Deleted sample sites can be downloaded
 again from **Settings → Sample sites**.
+
+### Regions and map layers
+
+On the **Pixel Map**, switch the toolbar to **Add region** and drag boxes or
+lassos: each becomes a named, coloured region. The upload button (or a drop
+onto the window) imports:
+
+- **A shapefile** (`.shp` with its `.shx`, `.dbf` and `.prj`, or a `.zip` of
+  them), such as a National Wetlands Inventory download. Each polygon that
+  holds pixels becomes a region, labelled from its attributes (for NWI, the
+  wetland code such as `PEM1Cm`). You can instead pool polygons by an
+  attribute, one region per wetland code for example. A pixel belongs to a
+  polygon when its centre is inside it; holes are excluded. Any projection is
+  accepted, including NWI's Albers.
+- **A GeoTIFF or NetCDF-4** raster, drawn under the pixels with a choice of
+  band or variable, colours and opacity. Hover to read a cell's value.
+
+**Compare** in the Regions card plots one mean line and interquartile band per
+region in Time Series, in the region's map colour, up to twelve at a time.
+Regions with more pixels than the sample size plot a random sample of them.
+The ⋯ menu exports the daily mean and IQR per region, every observation per
+region, and the regions themselves as GeoJSON, plus which pixels each region
+holds as CSV.
 
 ### Figures
 
@@ -134,28 +157,28 @@ WetLSP Explorer is a viewer. It does not include or process satellite imagery.
   fork of the [PLSP](https://github.com/BU-LCSC/PLSP) algorithms from Boston
   University's Land Cover & Surface Climate Group (Moon et al., 2022), updated
   for FLUXNET-CH4 wetland sites. PlanetScope surface reflectance scenes
-  (2021–2024) are filtered and converted to EVI, then gap-filled and smoothed
-  with a spline to give daily per-pixel EVI. Annual phenometrics (green-up,
-  peak, green-down, EVI amplitude, quality flags, and so on) are then computed
-  using the definitions in Moon et al. (2022). Published WetLSP data are the
-  annual phenometrics and the spline-smoothed daily EVI. Per-acquisition
-  (unsmoothed) EVI values are an internal processing step and are not
-  distributed.
+  (2021–2024) are filtered and converted to EVI (the per-acquisition `raw`
+  series), then gap-filled and smoothed with a spline to give daily per-pixel
+  EVI (the `spline` series). Annual phenometrics (green-up, peak, green-down,
+  EVI amplitude, quality flags, and so on) are then computed using the
+  definitions in Moon et al. (2022). Published WetLSP data are the annual
+  phenometrics and both EVI series; the lab received approval to share the
+  per-acquisition EVI in October 2026.
 - **PlanetScope imagery.** The PlanetScope imagery (2021–2024) was obtained
   through the [NASA Commercial Satellite Data Acquisition (CSDA) Program](https://science.nasa.gov/earth-science/csda/vendor-planet/).
   Includes copyrighted material of Planet Labs PBC. All rights reserved.
-  Published WetLSP data are limited to annual phenometrics and gap-filled,
-  spline-smoothed daily EVI. They are shared as Derived Products under the
-  [CSDA Program EULA for Planet Data](https://www.earthdata.nasa.gov/s3fs-public/2022-02/Planet_Expanded_EULA_06-21.pdf).
-  Raw PlanetScope scenes, surface reflectance bands, per-acquisition
-  (unsmoothed) index values, and Planet quality masks are **not** distributed
-  with this app, its installers, or the sample data. If you publish figures or
+  Published WetLSP data (annual phenometrics, per-acquisition EVI and
+  spline-smoothed daily EVI) are shared as Derived Products under the
+  [CSDA Program EULA for Planet Data](https://www.earthdata.nasa.gov/s3fs-public/2022-02/Planet_Expanded_EULA_06-21.pdf),
+  with the lab's approval for the per-acquisition EVI.
+  PlanetScope scenes, surface reflectance bands and Planet quality masks are
+  **not** distributed with this app, its installers, or the sample data. If you publish figures or
   results made with the app, credit Planet and CSDA as described in
   [References and how to cite](#references-and-how-to-cite).
 - **Sample sites and catalog.** The sample sites come from the lab's
   [wetlsp-sample-data](https://github.com/McNicol-Lab/wetlsp-sample-data/releases/tag/v2)
   release, which holds each site's annual phenometrics and spline-smoothed
-  daily EVI only. The bundled 95-site catalog ([details](public/catalog/README.md)) is
+  daily EVI. Release v3, being prepared, adds the per-acquisition EVI. The bundled 95-site catalog ([details](public/catalog/README.md)) is
   the WetLSP site catalog. Site IDs (for example `US-BZF`) follow FLUXNET
   naming and refer to eddy-covariance flux tower sites. The catalog's
   `base_network` column lists AmeriFlux and European flux network
@@ -235,11 +258,11 @@ The app's source code is released under the [MIT License](LICENSE).
 
 The MIT License applies only to the app's source code. It does not cover:
 
-- **Published WetLSP data** (annual phenometrics and spline-smoothed daily
-  EVI), which have their own terms. The WetLSP NetCDF files list
+- **Published WetLSP data** (annual phenometrics, per-acquisition EVI and
+  spline-smoothed daily EVI), which have their own terms. The WetLSP NetCDF files list
   `license = CC-BY-4.0` in their metadata.
-- **PlanetScope imagery**, including raw scenes, reflectance bands,
-  per-acquisition index values, and quality masks. These are copyrighted by
+- **PlanetScope imagery**, including scenes, reflectance bands and quality
+  masks. These are copyrighted by
   Planet Labs PBC, governed by the CSDA Program EULA for Planet Data, and not
   redistributed here.
 - **Basemap tiles**, which are covered by their providers' terms.

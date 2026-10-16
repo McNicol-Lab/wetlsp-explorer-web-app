@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderDown } from 'lucide-react';
 import { entriesFromDataTransfer, entriesFromFileList, pickDirectory } from '@/lib/ingest';
 import { useAppStore } from '@/store/useAppStore';
+import { isMapLayerDrop, useMapImportQueue } from '@/views/pixelMapLayers';
 
 export function useGlobalDrop(): { dragging: boolean } {
   const [dragging, setDragging] = useState(false);
@@ -40,6 +41,15 @@ export function useGlobalDrop(): { dragging: boolean } {
       if (!e.dataTransfer) return;
       try {
         const entries = await entriesFromDataTransfer(e.dataTransfer);
+        // A shapefile or GeoTIFF is a layer for the open site's Pixel Map, not a new site.
+        if (isMapLayerDrop(entries.map((x) => x.path))) {
+          const state = useAppStore.getState();
+          if (!state.activeSiteId) throw new Error('Open a site first: shapefiles and rasters are laid over a site’s pixels.');
+          const files = entries.flatMap((x) => (x.file ? [new File([x.file], x.path.split('/').pop() ?? x.path)] : []));
+          useMapImportQueue.setState({ files });
+          state.setView('pixelmap');
+          return;
+        }
         const folderHint = entries[0]?.path.includes('/')
           ? entries[0].path.split('/')[0]
           : undefined;

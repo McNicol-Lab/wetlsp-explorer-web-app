@@ -112,21 +112,32 @@ Always keep the original dataset folders as your permanent copy.
 
 The app's **Download sample sites** button fetches five sites from the lab's
 public release at [McNicol-Lab/wetlsp-sample-data v2](https://github.com/McNicol-Lab/wetlsp-sample-data/releases/tag/v2).
-The installer itself does not contain them. The release holds only what the lab
-may redistribute under the NASA CSDA terms: the annual phenometric NetCDFs and
-the spline-smoothed daily EVI. `npm run samples` removes the per-acquisition
-`raw` EVI rows, and `npm run samples:publish` refuses to upload a file that
-still has them. Both need DuckDB (`brew install duckdb` or `pip install duckdb`).
-To publish a new set:
+The installer itself does not contain them. v2 holds the annual phenometric
+NetCDFs and the spline-smoothed daily EVI. From v3 the release also carries the
+per-acquisition `raw` EVI, which the lab was approved to share in October 2026.
+`npm run samples` copies the lab's files unchanged, and both scripts refuse a
+`pixels_timeseries` file that lacks either series or holds any other. Both need
+DuckDB (`brew install duckdb` or `pip install duckdb`).
+
+`npm run samples` also compares every site with the release the app currently
+points at. Adding raw rows should change only the time series and READMEs. A
+site whose geometry, metadata or NetCDFs differ is held back, and
+`samples:publish` refuses to run, so an older zip cannot silently replace a
+newer published site. The comparison, row counts per series and year, EVI
+ranges and SHA-256 checksums are written to `RELEASE-DIFF.md`. To publish a new set:
 
 ```sh
-npm run samples                        # extract ../Actual Data/*.zip into samples/ (git-ignored), spline only
+npm run samples                        # extract ../Actual Data/*.zip into samples/ (git-ignored)
+# read samples/RELEASE-DIFF.md; fix any held-back site, or SAMPLES_ALLOW_CHANGED=SITE if intended
+# set SAMPLE_RELEASE in desktop/server.mjs to the new tag (v3)
 npm run samples:publish -- --dry-run   # check the files and update src/lib/sample-index.json
 npm run samples:publish -- --stage DIR # or lay the release out in DIR to upload by hand
 npm run samples:publish                # upload them to the release
 ```
 
-A new repository or tag also means updating `SAMPLE_RELEASE` in
-`desktop/server.mjs`, the one address the app downloads samples from. Then
-commit `src/lib/sample-index.json` and build a new installer. The app learns
-about files from that index, so the index and the release must match.
+Never re-upload different files under an existing tag: installed apps check
+each download against the sizes in their bundled index. A new set means a new
+tag, an updated `SAMPLE_RELEASE` in `desktop/server.mjs` (the one address the
+app downloads samples from), a committed `src/lib/sample-index.json` and a new
+installer. The app learns about files from that index, so the index and the
+release must match.
