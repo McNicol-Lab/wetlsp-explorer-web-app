@@ -28,16 +28,44 @@ function rng(seed: number): () => number {
  * drawn, wherever it sits in file order.
  */
 export function randomSample(ids: ArrayLike<number>, k: number, seed: number): Int32Array {
-  const n = ids.length;
-  const take = Math.max(0, Math.min(n, Math.floor(k)));
-  const pool = Int32Array.from(ids);
-  if (take >= n) return pool.sort();
-  const next = rng(seed);
-  for (let i = 0; i < take; i++) {
-    const j = i + Math.floor(next() * (n - i));
-    const tmp = pool[i];
-    pool[i] = pool[j];
-    pool[j] = tmp;
+  const take = Math.max(0, Math.min(ids.length, Math.floor(k)));
+  if (take >= ids.length) return Int32Array.from(ids).sort();
+  return new SeededDraw(ids, seed).take(take).sort();
+}
+
+/**
+ * The same draw as `randomSample`, handed out a few at a time and in draw
+ * order: the first `k` taken are `randomSample(ids, k, seed)`. Lets a caller
+ * skip ids that turn out to have no data and keep drawing, so "the first n
+ * with data" is one fixed set whichever way the data is read.
+ */
+export class SeededDraw {
+  private readonly pool: Int32Array;
+  private readonly next: () => number;
+  private at = 0;
+
+  constructor(ids: ArrayLike<number>, seed: number) {
+    this.pool = Int32Array.from(ids);
+    this.next = rng(seed);
   }
-  return pool.slice(0, take).sort();
+
+  get remaining(): number {
+    return this.pool.length - this.at;
+  }
+
+  /** The next `k` ids of the draw (fewer when the pool runs out). */
+  take(k: number): Int32Array {
+    const { pool } = this;
+    const n = pool.length;
+    const end = Math.min(n, this.at + Math.max(0, Math.floor(k)));
+    for (let i = this.at; i < end; i++) {
+      const j = i + Math.floor(this.next() * (n - i));
+      const tmp = pool[i];
+      pool[i] = pool[j];
+      pool[j] = tmp;
+    }
+    const out = pool.slice(this.at, end);
+    this.at = end;
+    return out;
+  }
 }

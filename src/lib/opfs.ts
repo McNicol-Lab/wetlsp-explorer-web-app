@@ -82,10 +82,14 @@ export async function writeSiteFile(
 }
 
 export async function readSiteFile(siteId: string, relPath: string): Promise<File> {
+  return (await siteFileHandle(siteId, relPath)).getFile();
+}
+
+/** The stored file's handle, for DuckDB to open a sync access handle on. */
+export async function siteFileHandle(siteId: string, relPath: string): Promise<FileSystemFileHandle> {
   const { dirs, name } = splitPath(relPath);
   const dir = await dirFor([ROOT_DIR, siteId, ...dirs], { create: false });
-  const handle = await dir.getFileHandle(safeSegment(name), { create: false });
-  return handle.getFile();
+  return dir.getFileHandle(safeSegment(name), { create: false });
 }
 
 /** Remove one stored file; nothing happens when it is already gone. */
@@ -127,6 +131,29 @@ export async function listStoredSites(): Promise<string[]> {
     if (entry.kind === 'directory') out.push(entry.name);
   }
   return out.sort();
+}
+
+/** Every file stored for one site, as paths relative to its folder (stored names). */
+export async function listSiteFiles(siteId: string): Promise<string[]> {
+  const out: string[] = [];
+  const walk = async (dir: FileSystemDirectoryHandle, prefix: string) => {
+    // @ts-expect-error - values() is present at runtime.
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file') out.push(prefix + entry.name);
+      else await walk(entry as FileSystemDirectoryHandle, `${prefix}${entry.name}/`);
+    }
+  };
+  try {
+    await walk(await siteDir(siteId, false), '');
+  } catch {
+    return [];
+  }
+  return out;
+}
+
+/** A relative path as it is stored, to compare with `listSiteFiles`. */
+export function storedPath(relPath: string): string {
+  return relPath.split('/').filter(Boolean).map(safeSegment).join('/');
 }
 
 /** Recursive byte total for one site, used by the left rail's size chip. */

@@ -4,7 +4,7 @@
  */
 import * as arrow from 'apache-arrow';
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import { crsFromFileMetadata, duckdbName, getDb, registerSite, tableRef } from './duckdb';
+import { crsFromFileMetadata, duckdbName, getDb, registerSite, tableRef, timeseriesRef } from './duckdb';
 import {
   buildFactsSql,
   buildWhere,
@@ -13,7 +13,14 @@ import {
   UnboundedQueryError,
   type TimeseriesFilters,
 } from './sql';
-import { forgetYearTables, loadYearTables, yearTableEstimate } from './yearCache';
+import {
+  forgetYearTables,
+  loadYearTables,
+  readPixelTables,
+  readyYearTables,
+  sitePixelCount,
+  yearTableEstimate,
+} from './yearCache';
 import {
   dailySummary,
   distinctPixels,
@@ -24,7 +31,8 @@ import {
 } from '@/lib/yearTable';
 import { CancelledError } from '@/lib/rpc';
 import { deleteCacheFile, readCacheFile, writeCacheFile } from '@/lib/opfs';
-import { randomSample } from '@/lib/sampling';
+import { randomSample, SeededDraw } from '@/lib/sampling';
+import { pixelIndex } from '@/lib/pixelIndex';
 import { formatBytes } from '@/lib/format';
 import { analysisYears } from '@/lib/years';
 import type {
@@ -347,7 +355,7 @@ async function countSiteFacts(manifest: SiteManifest, opts: QueryOptions): Promi
 
   if (manifest.timeseries) {
     opts.onProgress?.({ phase: 'Summarising time series', fraction: null });
-    const t = await streamQuery(buildFactsSql(tableRef(manifest.siteId, manifest.timeseries)), opts);
+    const t = await streamQuery(buildFactsSql(timeseriesRef(manifest.siteId, manifest.timeseries)), opts);
     const years = col<ArrayLike<number>>(t, 'year');
     const series = strCol(t, 'series');
     const counts = col<ArrayLike<number>>(t, 'n');
@@ -433,6 +441,103 @@ async function yearTables(
   return out;
 }
 
+/** All of the site's tables for these years and series, when none needs a scan; else null. */
+async function readyTables(manifest: SiteManifest, years: number[], series: string[]): Promise<YearTable[] | null> {
+  const out: YearTable[] = [];
+  for (const s of series) {
+    const tables = await readyYearTables(manifest, years, s);
+    if (!tables) return null;
+    for (const y of years) out.push(tables.get(y)!);
+  }
+  return out;
+}
+
+/**
+ * Reading pixels directly costs about 5 ms a pixel on BR-Npw against 0.14 ms
+ * per site pixel to scan a year (and the scan also yields the whole table),
+ * so it pays while a request is under ~1/50 of the site: 250 pixels of a
+ * 14,000-pixel site and up; a single clicked pixel almost anywhere.
+ */
+const DIRECT_READ_SHARE = 50;
+
+async function directReadPays(manifest: SiteManifest, pixels: number): Promise<boolean> {
+  const n = await sitePixelCount(manifest);
+  return n !== null && pixels > 0 && pixels * DIRECT_READ_SHARE <= n;
+}
+
+interface PixelRead {
+  key: string;
+  ids: Set<number>;
+  tables: Promise<YearTable[]>;
+}
+/** Recent direct reads, newest last, so the chart and its summary share one. */
+const pixelReads: PixelRead[] = [];
+
+/**
+ * Direct-read tables for these pixels, shared with any recent read of the
+ * same years and series that covered them (a sample's draw covers the
+ * sample). A read cancelled by its first caller is retried for the others.
+ */
+async function pixelTables(
+  manifest: SiteManifest,
+  years: number[],
+  series: string[],
+  pixelIds: ArrayLike<number>,
+  opts: QueryOptions,
+): Promise<YearTable[]> {
+  const key = `${manifest.siteId}|${manifest.importedAt}|${years.join(',')}|${series.join(',')}`;
+  for (;;) {
+    let read = pixelReads.find((r) => r.key === key && Array.from(pixelIds).every((id) => r.ids.has(id)));
+    if (!read) {
+      const tables = readPixelTables(manifest, years, series, pixelIds, opts);
+      const entry: PixelRead = { key, ids: new Set(Array.from(pixelIds)), tables };
+      read = entry;
+      pixelReads.push(entry);
+      if (pixelReads.length > 4) pixelReads.shift();
+      tables.catch(() => {
+        const i = pixelReads.indexOf(entry);
+        if (i >= 0) pixelReads.splice(i, 1);
+      });
+    }
+    try {
+      return await (opts.signal ? abortable(read.tables, opts.signal) : read.tables);
+    } catch (err) {
+      if (err instanceof CancelledError && !opts.signal?.aborted) continue;
+      throw err;
+    }
+  }
+}
+
+function abortable<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new CancelledError());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new CancelledError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+/**
+ * Tables that hold at least these pixels: the site's year tables when they
+ * are ready (or the request is large next to the site), otherwise just
+ * these pixels read directly, so a first chart does not wait for a scan of
+ * the whole site. Both give the same numbers.
+ */
+async function tablesFor(
+  manifest: SiteManifest,
+  years: number[],
+  series: string[],
+  pixelIds: ArrayLike<number>,
+  opts: QueryOptions,
+): Promise<YearTable[]> {
+  if (years.length && series.length && (await directReadPays(manifest, pixelIds.length))) {
+    const ready = await readyTables(manifest, years, series);
+    if (ready) return ready;
+    return pixelTables(manifest, years, series, pixelIds, opts);
+  }
+  return yearTables(manifest, years, series, opts);
+}
+
 export async function getDistinctPixelIds(
   manifest: SiteManifest,
   years: number[],
@@ -446,18 +551,49 @@ export async function getDistinctPixelIds(
 /**
  * A uniform random sample of the pixels with data. The same seed gives the
  * same pixels, so a chart stays put until the user asks for a new sample.
+ *
+ * With `candidates` (the site's mapped pixels), the sample is the first `n`
+ * of a seeded draw of them that have data, so it can be found by reading a
+ * few hundred pixels instead of scanning the year, and is the same set
+ * either way. `available` (pixels with data) is then null until the year's
+ * tables are ready.
  */
 export async function samplePixelIds(
   manifest: SiteManifest,
   years: number[],
   series: string[],
   n: number,
-  opts: QueryOptions & { seed: number },
-): Promise<{ ids: Int32Array; available: number }> {
-  const all = await getDistinctPixelIds(manifest, years, series, opts);
+  opts: QueryOptions & { seed: number; candidates?: ArrayLike<number> | null },
+): Promise<{ ids: Int32Array; available: number | null }> {
   const cap = Math.min(Math.max(1, Math.floor(n)), MAX_PIXEL_SAMPLE);
-  if (all.length <= cap) return { ids: all, available: all.length };
-  return { ids: randomSample(all, cap, opts.seed), available: all.length };
+  const pool = opts.candidates;
+  if (!pool?.length) {
+    const all = await getDistinctPixelIds(manifest, years, series, opts);
+    if (all.length <= cap) return { ids: all, available: all.length };
+    return { ids: randomSample(all, cap, opts.seed), available: all.length };
+  }
+
+  const draw = new SeededDraw(pool, opts.seed);
+  const kept: number[] = [];
+  const direct =
+    manifest.timeseries &&
+    (await directReadPays(manifest, cap)) &&
+    !(await readyTables(manifest, years, series));
+  if (!direct) {
+    const all = await getDistinctPixelIds(manifest, years, series, opts);
+    while (kept.length < cap && draw.remaining > 0) {
+      for (const id of draw.take(cap - kept.length)) if (pixelIndex(all, id) >= 0) kept.push(id);
+    }
+    return { ids: Int32Array.from(kept).sort(), available: all.length };
+  }
+  // A little over what is needed, as some mapped pixels have no data that year.
+  while (kept.length < cap && draw.remaining > 0) {
+    const need = cap - kept.length;
+    const batch = draw.take(Math.ceil(need * 1.25) + 16);
+    const withData = distinctPixels(await pixelTables(manifest, years, series, batch, opts));
+    for (const id of batch) if (kept.length < cap && pixelIndex(withData, id) >= 0) kept.push(id);
+  }
+  return { ids: Int32Array.from(kept).sort(), available: null };
 }
 
 /* ------------------------------------------------------------ timeseries */
@@ -471,7 +607,7 @@ export async function getTimeseries(
 ): Promise<TimeseriesBundle> {
   if (!manifest.timeseries) throw new Error('This site has no `pixels_timeseries` table.');
   buildWhere(filters); // the same guards as the SQL path: pixel cap, ids, dates
-  const tables = await yearTables(manifest, filters.years, filters.series, opts);
+  const tables = await tablesFor(manifest, filters.years, filters.series, filters.pixelIds, opts);
   return extractBundle(tables, filters.pixelIds, filters.dateRange, MAX_RESULT_ROWS);
 }
 
@@ -482,7 +618,7 @@ export async function getDailySummary(
 ): Promise<DailySummaryRow[]> {
   if (!manifest.timeseries) return [];
   buildWhere(filters);
-  const tables = await yearTables(manifest, filters.years, filters.series, opts);
+  const tables = await tablesFor(manifest, filters.years, filters.series, filters.pixelIds, opts);
   return dailySummary(tables, filters.pixelIds, filters.dateRange);
 }
 
@@ -495,7 +631,7 @@ export async function getPixelTrace(
 ): Promise<TimeseriesBundle> {
   if (!manifest.timeseries) throw new Error('This site has no `pixels_timeseries` table.');
   if (!Number.isInteger(pixelId)) throw new Error('Pixel id must be an integer.');
-  const tables = await yearTables(manifest, years, series, opts);
+  const tables = await tablesFor(manifest, years, series, [pixelId], opts);
   return extractBundle(tables, [pixelId], null, 20_000);
 }
 
@@ -540,6 +676,7 @@ export async function extractShapes(
 
 /** Forget everything derived from a site's time series: year tables and facts. */
 export async function clearQueryCaches(siteId: string): Promise<void> {
+  for (let i = pixelReads.length - 1; i >= 0; i--) if (pixelReads[i].key.startsWith(`${siteId}|`)) pixelReads.splice(i, 1);
   await forgetYearTables(siteId);
   await deleteCacheFile(factsKey(siteId));
 }

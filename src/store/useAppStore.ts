@@ -43,7 +43,7 @@ import {
 } from '@/engine/queries';
 import { unregisterSite } from '@/engine/duckdb';
 import { prefetchSite } from '@/engine/yearCache';
-import { needsSplit, splitLargeTimeseries } from '@/engine/splitTimeseries';
+import { needsSplit, removeStaleParts, splitLargeTimeseries } from '@/engine/splitTimeseries';
 import { releaseSite } from '@/engine/netcdf';
 import { DEFAULT_PIXEL_SAMPLE, DEFAULT_SELECTION_CAP, MAX_PIXEL_SAMPLE } from '@/engine/sql';
 import { newSeed, randomSample } from '@/lib/sampling';
@@ -621,6 +621,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
+      // Parts an earlier import or a failed split left behind (never while one is writing).
+      if (!get().ingest.active) await removeStaleParts(manifest).catch(() => undefined);
       const bytesOnDisk = await siteBytes(siteId).catch(() => manifest.totalBytes);
 
       patch({ meta, facts, geometry, bytesOnDisk, status: 'ready', notes });

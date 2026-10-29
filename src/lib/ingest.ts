@@ -454,7 +454,7 @@ export async function ingestEntries(
   if (opts.origin) manifest.origin = opts.origin;
 
   // A time series too large to load in the browser is stored in parts.
-  const { needsSplit, splitLargeTimeseries } = await import('@/engine/splitTimeseries');
+  const { needsSplit, removeStaleParts, splitLargeTimeseries } = await import('@/engine/splitTimeseries');
   if (needsSplit(manifest)) {
     try {
       manifest = await splitLargeTimeseries(manifest, { signal: opts.signal, onProgress: (p) => progress(p) });
@@ -472,6 +472,8 @@ export async function ingestEntries(
   }
   await saveManifest(manifest);
   await saveSiteMeta(siteId, meta);
+  // A re-import leaves the earlier split's parts behind: gigabytes for a large site.
+  if (!isNew) await removeStaleParts(manifest).catch(() => undefined);
 
   progress({ phase: 'Ready', fraction: 1 }, true);
   return { manifest, meta, bytesWritten };

@@ -12,12 +12,13 @@
 import * as duckdb from '@duckdb/duckdb-wasm';
 import { getDb, sqlStr } from './duckdb';
 import { CancelledError } from '@/lib/rpc';
-import { deleteSiteFile, readSiteFile, siteFileOpfsPath } from '@/lib/opfs';
+import { deleteSiteFile, listSiteFiles, readSiteFile, siteFileHandle, siteFileOpfsPath, storedPath } from '@/lib/opfs';
 import {
   equalCuts,
   partPath,
   planPixelCuts,
   rangeWhere,
+  staleSplitFiles,
   SPLIT_ABOVE_BYTES,
   TARGET_PART_BYTES,
   type RowGroupStat,
@@ -28,6 +29,17 @@ import type { ProgressEvent, SiteManifest, StoredFile } from '@/lib/types';
 export interface SplitOptions {
   signal?: AbortSignal;
   onProgress?: (p: ProgressEvent) => void;
+}
+
+/**
+ * Delete split parts and `tmp_` files the manifest does not reference, left
+ * by an earlier import or a failed split. Run only when no import is writing.
+ */
+export async function removeStaleParts(manifest: SiteManifest): Promise<void> {
+  const keep = (manifest.timeseries?.parts ?? []).map((p) => storedPath(p.path));
+  for (const path of staleSplitFiles(await listSiteFiles(manifest.siteId), keep)) {
+    await deleteSiteFile(manifest.siteId, path).catch(() => undefined);
+  }
 }
 
 /** True when a time series part is too large to be scanned in memory. */
@@ -90,8 +102,13 @@ async function splitOne(
   opts.signal?.addEventListener('abort', onAbort);
   const rows = async (sql: string) => (await conn.query(sql)).toArray().map((r) => r.toJSON());
   try {
-    // A file handle, never a buffer: this file is the one too large to load.
-    await db.registerFileHandle(src, await readSiteFile(siteId, part.path), duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, true);
+    // A file handle, never a buffer: this file is the one too large to load. A sync
+    // access handle reads it ~8x faster than the File reader; dropped before it is deleted.
+    try {
+      await db.registerFileHandle(src, await siteFileHandle(siteId, part.path), duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
+    } catch {
+      await db.registerFileHandle(src, await readSiteFile(siteId, part.path), duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, true);
+    }
     registered.push(src);
     const meta = await rows(
       `SELECT row_group_id AS g, path_in_schema AS col, type, total_compressed_size AS bytes,
@@ -129,12 +146,16 @@ async function splitOne(
       if (opts.signal?.aborted) throw new CancelledError();
       const path = partPath(part.path, i, n);
       const target = siteFileOpfsPath(siteId, path);
+      // A part of the same name can be left from an earlier import of the site.
+      await deleteSiteFile(siteId, path);
       await db.registerOPFSFileName(target);
       written.push(path);
       registered.push(target);
+      // USE_TMP_FILE false: over an existing file DuckDB writes `tmp_<name>` and renames
+      // it, and that name has no OPFS handle ("No OPFS access handle registered").
       await conn.query(
         `COPY (${select} FROM read_parquet(${sqlStr(src)}) WHERE ${rangeWhere(cuts, i)})
-         TO ${sqlStr(target)} (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 131072)`,
+         TO ${sqlStr(target)} (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 131072, USE_TMP_FILE false)`,
       );
       // Closes DuckDB's exclusive handle on the new file, so it can be read.
       await db.dropFile(target);

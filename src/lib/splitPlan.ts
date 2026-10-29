@@ -67,6 +67,21 @@ export function rangeWhere(cuts: number[], i: number): string {
   return i === 0 ? `(${parts.join(' AND ')} OR pixel_id IS NULL)` : parts.join(' AND ');
 }
 
+/**
+ * Files a split left behind that the site no longer uses: parts of an earlier
+ * import (re-importing writes the original again and splits it anew) and
+ * DuckDB's `tmp_` files from a write that failed. `stored` and `keep` are
+ * paths relative to the site's folder; anything else is never touched.
+ */
+export function staleSplitFiles(stored: string[], keep: Iterable<string>): string[] {
+  const used = new Set(keep);
+  return stored.filter((path) => {
+    if (used.has(path)) return false;
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    return /\.part-\d+-of-\d+\.parquet$/i.test(name) || /^tmp_.*\.parquet$/i.test(name);
+  });
+}
+
 /** `dir/AU_Arc_pixels_timeseries.parquet`, 0, 4 -> `dir/AU_Arc_pixels_timeseries.part-1-of-4.parquet`. */
 export function partPath(original: string, i: number, n: number): string {
   const stem = original.replace(/\.parquet$/i, '');

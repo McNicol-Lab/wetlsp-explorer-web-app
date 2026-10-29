@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { equalCuts, partPath, planPixelCuts, rangeWhere, type RowGroupStat } from './splitPlan';
+import { equalCuts, partPath, planPixelCuts, rangeWhere, staleSplitFiles, type RowGroupStat } from './splitPlan';
 
 /** Which part a pixel id lands in, by evaluating the same bounds as `rangeWhere`. */
 function partOf(cuts: number[], id: number | null): number[] {
@@ -59,5 +59,22 @@ describe('split plan', () => {
   it('names parts after the file they came from', () => {
     expect(partPath('AU_Arc_pixels_timeseries.parquet', 0, 4)).toBe('AU_Arc_pixels_timeseries.part-1-of-4.parquet');
     expect(partPath('pixels_timeseries_ds/p.parquet', 9, 12)).toBe('pixels_timeseries_ds/p.part-10-of-12.parquet');
+  });
+
+  it('finds parts and tmp files a site no longer uses, and nothing else', () => {
+    const keep = ['BR_Npw_pixels_timeseries-001.part-01-of-16.parquet', 'BR_Npw_pixels_geom.parquet'];
+    const stored = [
+      ...keep,
+      'BR_Npw_pixels_timeseries-001.part-12-of-12.parquet', // an earlier import's split
+      'tmp_BR_Npw_pixels_timeseries-001.part-02-of-16.parquet', // a failed DuckDB write
+      'BR_Npw_pixels_timeseries-001.parquet', // not split output: left alone
+      'BR-Npw-wetlsp-2024.nc',
+      'pixels_timeseries_ds/p.part-3-of-4.parquet',
+    ];
+    expect(staleSplitFiles(stored, keep)).toEqual([
+      'BR_Npw_pixels_timeseries-001.part-12-of-12.parquet',
+      'tmp_BR_Npw_pixels_timeseries-001.part-02-of-16.parquet',
+      'pixels_timeseries_ds/p.part-3-of-4.parquet',
+    ]);
   });
 });
