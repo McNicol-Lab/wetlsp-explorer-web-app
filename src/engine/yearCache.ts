@@ -5,12 +5,14 @@
  * waits for a scan only the first time a year is ever used, and not at all
  * once the background pass has reached it.
  */
+import * as duckdb from '@duckdb/duckdb-wasm';
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import { getDb, sqlStr } from './duckdb';
+import { getDb, registerSite, sqlStr, tableRef } from './duckdb';
 import { CancelledError } from '@/lib/rpc';
 import { deleteCacheFiles, readCacheFile, readSiteFile, writeCacheFile } from '@/lib/opfs';
-import { packYearTable, unpackYearTable, YearTableBuilder, type YearTable } from '@/lib/yearTable';
-import type { ProgressEvent, SiteManifest } from '@/lib/types';
+import { formatBytes } from '@/lib/format';
+import { packYearTable, unpackYearTable, yearTableBytes, YearTableBuilder, type YearTable } from '@/lib/yearTable';
+import type { ProgressEvent, SiteManifest, StoredFile } from '@/lib/types';
 
 export interface LoadOptions {
   signal?: AbortSignal;
@@ -18,10 +20,21 @@ export interface LoadOptions {
 }
 
 /**
- * 20 MB each for a 14,000-pixel site, 46 MB for a 31,000-pixel one. Four is
- * what compare-years needs for one site; older tables reload from storage.
+ * 20 MB each for a 14,000-pixel site, 46 MB for a 31,000-pixel one, 180 MB
+ * for AU-Arc (125,000 pixels). Four is what compare-years needs for one
+ * site; older tables reload from storage. The byte limit keeps large sites
+ * from holding gigabytes; the newest table always stays.
  */
 const MEMORY_LIMIT = 4;
+const MEMORY_BYTES = 1024 ** 3;
+/** Tables built in one pass over the file are held together until it ends. */
+const PASS_BYTES = 1024 ** 3;
+/**
+ * Parts up to this size are loaded whole for the scan: range reads of the same
+ * file were ~10x slower. Larger ones (a site that could not be split) are
+ * range-read: slow, but Chrome cannot load a file of 2 GiB or more at all.
+ */
+const LOAD_WHOLE_BYTES = 1024 ** 3;
 const memory = new Map<string, YearTable>();
 const building = new Map<string, Promise<YearTable>>();
 
@@ -34,7 +47,42 @@ const sourceOf = (m: SiteManifest) => `${m.importedAt}:${m.timeseries?.totalByte
 function remember(k: string, t: YearTable) {
   memory.delete(k);
   memory.set(k, t);
-  while (memory.size > MEMORY_LIMIT) memory.delete(memory.keys().next().value!);
+  let bytes = 0;
+  for (const v of memory.values()) bytes += yearTableBytes(v);
+  while (memory.size > 1 && (memory.size > MEMORY_LIMIT || bytes > MEMORY_BYTES)) {
+    const oldest = memory.keys().next().value!;
+    bytes -= yearTableBytes(memory.get(oldest)!);
+    memory.delete(oldest);
+  }
+}
+
+const pixelCounts = new Map<string, Promise<number | null>>();
+
+/** Pixels in the site's geometry (cheap: a small table), or null without one. */
+function pixelCount(manifest: SiteManifest): Promise<number | null> {
+  const k = `${manifest.siteId}|${manifest.importedAt}`;
+  let p = pixelCounts.get(k);
+  if (!p) {
+    p = (async () => {
+      if (!manifest.geom) return null;
+      await registerSite(manifest);
+      const conn = await (await getDb()).connect();
+      try {
+        const t = await conn.query(`SELECT count(*)::INTEGER AS n FROM ${tableRef(manifest.siteId, manifest.geom)}`);
+        return Number(t.getChild('n')?.get(0) ?? 0) || null;
+      } finally {
+        await conn.close();
+      }
+    })().catch(() => null);
+    pixelCounts.set(k, p);
+  }
+  return p;
+}
+
+/** Memory one year table of this site takes, at most (a leap year), or null when unknown. */
+export async function yearTableEstimate(manifest: SiteManifest): Promise<number | null> {
+  const n = await pixelCount(manifest);
+  return n === null ? null : n * (366 * 4 + 4);
 }
 
 /** The table for one site-year-series: memory, then offline storage, then a scan. */
@@ -84,13 +132,23 @@ export async function loadYearTables(
       out.set(missing[i], t);
     });
     if (toScan.length) {
-      const scanned = scan(manifest, toScan, series, opts);
-      for (const y of toScan) {
-        const k = key(manifest.siteId, y, series);
-        const one = scanned.then((m) => m.get(y)!);
-        building.set(k, one);
-        void one.catch(() => undefined).finally(() => building.get(k) === one && building.delete(k));
-        waits.push(one.then((t) => void out.set(y, t)));
+      // As many years per pass as fit in memory together: all of them for a
+      // small site, one at a time for a million-pixel one.
+      const each = await yearTableEstimate(manifest);
+      const perPass = each ? Math.max(1, Math.floor(PASS_BYTES / each)) : toScan.length;
+      let previous: Promise<unknown> = Promise.resolve();
+      for (let i = 0; i < toScan.length; i += perPass) {
+        const group = toScan.slice(i, i + perPass);
+        // One pass after another: DuckDB has a single worker, and memory is the point.
+        const scanned = previous.catch(() => undefined).then(() => scan(manifest, group, series, opts));
+        previous = scanned;
+        for (const y of group) {
+          const k = key(manifest.siteId, y, series);
+          const one = scanned.then((m) => m.get(y)!);
+          building.set(k, one);
+          void one.catch(() => undefined).finally(() => building.get(k) === one && building.delete(k));
+          waits.push(one.then((t) => void out.set(y, t)));
+        }
       }
     }
   }
@@ -102,7 +160,7 @@ export async function loadYearTables(
 
 async function readStored(manifest: SiteManifest, year: number, series: string): Promise<YearTable | null> {
   const cached = await readCacheFile(fileKey(manifest.siteId, year, series));
-  return cached ? unpackYearTable(await cached.arrayBuffer(), sourceOf(manifest)) : null;
+  return cached ? unpackYearTable(cached, sourceOf(manifest)) : null;
 }
 
 function abortable<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -116,11 +174,34 @@ function abortable<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
 
 let scanId = 0;
 
+/** Hand one stored part to DuckDB for a scan: whole when it fits, range-read when not. */
+async function registerPart(siteId: string, part: StoredFile, name: string): Promise<void> {
+  const db = await getDb();
+  const file = await readSiteFile(siteId, part.path);
+  if (file.size > LOAD_WHOLE_BYTES) {
+    await db.registerFileHandle(name, file, duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, true);
+    return;
+  }
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await file.arrayBuffer();
+  } catch (err) {
+    // Chrome words a file it cannot load (too large, or memory) as a permission problem.
+    if (err instanceof DOMException && err.name === 'NotReadableError') {
+      throw new Error(
+        `${part.path} (${formatBytes(file.size)}) could not be loaded into memory. The browser cannot load a file of 2 GB or more in one piece, and may refuse smaller ones when memory is short. Close other tabs, or remove and import the site again so it is stored in smaller parts.`,
+      );
+    }
+    throw err;
+  }
+  await db.registerFileBuffer(name, new Uint8Array(bytes));
+}
+
 /**
  * One pass over the time series for the given years: pixel, day of year and
- * value, streamed straight into each year's table. The parquet parts are
- * handed to DuckDB as in-memory buffers for the scan: range reads from
- * offline storage made the same scan several times slower.
+ * value, streamed straight into each year's table. One part at a time, loaded
+ * whole into DuckDB and dropped before the next, so memory holds one part,
+ * not the site: AU-Arc's 2.75 GB file could never be loaded at all.
  */
 async function scan(
   manifest: SiteManifest,
@@ -131,45 +212,51 @@ async function scan(
   if (!manifest.timeseries) throw new Error('This site has no `pixels_timeseries` table.');
   const label = years.length === 1 ? String(years[0]) : `${Math.min(...years)}–${Math.max(...years)}`;
   const phase = `Preparing ${label} (first time only)`;
+  const { parts, totalBytes } = manifest.timeseries;
   opts.onProgress?.({ phase, fraction: null });
 
   const db = await getDb();
-  const names: string[] = [];
-  const builders = new Map(years.map((y) => [y, new YearTableBuilder(y, series, 4096)]));
-  try {
-    for (const part of manifest.timeseries.parts) {
-      const file = await readSiteFile(manifest.siteId, part.path);
-      const name = `yearscan_${++scanId}.parquet`;
-      await db.registerFileBuffer(name, new Uint8Array(await file.arrayBuffer()));
-      names.push(name);
-    }
-    const sql = [
+  const pixels = await pixelCount(manifest);
+  const builders = new Map(years.map((y) => [y, new YearTableBuilder(y, series, pixels ?? 4096)]));
+  const sql = (name: string) =>
+    [
       "SELECT pixel_id, year, datediff('day', make_date(year, 1, 1), CAST(date AS DATE)) AS d, evi",
-      `FROM read_parquet([${names.map(sqlStr).join(', ')}], union_by_name = true)`,
+      `FROM read_parquet(${sqlStr(name)})`,
       `WHERE year IN (${years.map(Number).join(', ')}) AND series = ${sqlStr(series)} AND evi IS NOT NULL`,
     ].join('\n');
-    const conn: AsyncDuckDBConnection = await db.connect();
-    let rows = 0;
+  let rows = 0;
+  let bytesDone = 0;
+  for (const part of parts) {
+    const name = `yearscan_${++scanId}.parquet`;
+    await registerPart(manifest.siteId, part, name);
     try {
-      const reader = await conn.send(sql, true);
-      for await (const batch of reader) {
-        const id = batch.getChild('pixel_id')!.toArray() as ArrayLike<number>;
-        const yr = batch.getChild('year')!.toArray() as ArrayLike<number>;
-        const d = batch.getChild('d')!.toArray() as ArrayLike<number>;
-        const v = batch.getChild('evi')!.toArray() as ArrayLike<number>;
-        let b = builders.get(Number(yr[0]))!;
-        for (let i = 0; i < batch.numRows; i++) {
-          if (Number(yr[i]) !== b.year) b = builders.get(Number(yr[i]))!;
-          b.add(id[i], d[i], v[i]);
+      const conn: AsyncDuckDBConnection = await db.connect();
+      try {
+        const reader = await conn.send(sql(name), true);
+        for await (const batch of reader) {
+          const id = batch.getChild('pixel_id')!.toArray() as ArrayLike<number>;
+          const yr = batch.getChild('year')!.toArray() as ArrayLike<number>;
+          const d = batch.getChild('d')!.toArray() as ArrayLike<number>;
+          const v = batch.getChild('evi')!.toArray() as ArrayLike<number>;
+          let b = builders.get(Number(yr[0]))!;
+          for (let i = 0; i < batch.numRows; i++) {
+            if (Number(yr[i]) !== b.year) b = builders.get(Number(yr[i]))!;
+            b.add(id[i], d[i], v[i]);
+          }
+          rows += batch.numRows;
+          opts.onProgress?.({
+            phase,
+            fraction: parts.length > 1 && totalBytes > 0 ? bytesDone / totalBytes : null,
+            detail: `${rows.toLocaleString('en-US')} rows`,
+          });
         }
-        rows += batch.numRows;
-        opts.onProgress?.({ phase, fraction: null, detail: `${rows.toLocaleString('en-US')} rows` });
+      } finally {
+        await conn.close();
       }
     } finally {
-      await conn.close();
+      await db.dropFile(name).catch(() => undefined);
     }
-  } finally {
-    for (const n of names) await db.dropFile(n).catch(() => undefined);
+    bytesDone += part.size;
   }
 
   const out = new Map<number, YearTable>();
@@ -204,10 +291,17 @@ export function prefetchSite(manifest: SiteManifest, years: number[], series: st
   void (async () => {
     try {
       // The newest year first, on its own, because it is what the charts
-      // open on; then every other year together in one more pass.
+      // open on; then the other years, together when they fit in memory.
+      // Nothing is kept here: each group's tables go to storage and memory's
+      // own limit, so a large site never holds every year at once.
       const newest = Math.max(...years);
       await loadYearTables(manifest, [newest], series, { signal: controller.signal });
-      await loadYearTables(manifest, years.filter((y) => y !== newest), series, { signal: controller.signal });
+      const each = await yearTableEstimate(manifest);
+      const rest = years.filter((y) => y !== newest).sort((a, b) => b - a);
+      const perPass = each ? Math.max(1, Math.floor(PASS_BYTES / each)) : rest.length;
+      for (let i = 0; i < rest.length; i += perPass) {
+        await loadYearTables(manifest, rest.slice(i, i + perPass), series, { signal: controller.signal });
+      }
     } catch {
       /* stopped, or a chart will surface the error if the user asks for it */
     }
@@ -222,5 +316,6 @@ export async function forgetYearTables(siteId: string): Promise<void> {
     prefetching = null;
   }
   for (const k of [...memory.keys()]) if (k.startsWith(`${siteId}|`)) memory.delete(k);
+  for (const k of [...pixelCounts.keys()]) if (k.startsWith(`${siteId}|`)) pixelCounts.delete(k);
   await deleteCacheFiles(`ts-v1-${siteId}-`);
 }

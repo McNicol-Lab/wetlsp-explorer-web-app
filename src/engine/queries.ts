@@ -13,7 +13,7 @@ import {
   UnboundedQueryError,
   type TimeseriesFilters,
 } from './sql';
-import { forgetYearTables, loadYearTables } from './yearCache';
+import { forgetYearTables, loadYearTables, yearTableEstimate } from './yearCache';
 import {
   dailySummary,
   distinctPixels,
@@ -25,6 +25,7 @@ import {
 import { CancelledError } from '@/lib/rpc';
 import { deleteCacheFile, readCacheFile, writeCacheFile } from '@/lib/opfs';
 import { randomSample } from '@/lib/sampling';
+import { formatBytes } from '@/lib/format';
 import { analysisYears } from '@/lib/years';
 import type {
   DailySummaryRow,
@@ -384,6 +385,9 @@ function isoDate(value: unknown): string | null {
 
 /* ---------------------------------------------------------------- pixels */
 
+/** Memory one chart may need for its year tables; four AU-Arc years are 0.7 GB. */
+const REQUEST_BYTES = 3 * 1024 ** 3;
+
 /**
  * Every chart below reads year tables (lib/yearTable.ts) rather than
  * scanning `pixels_timeseries`: a random sample touches every row group of
@@ -398,6 +402,15 @@ async function yearTables(
 ): Promise<YearTable[]> {
   if (years.length === 0 || series.length === 0) {
     throw new UnboundedQueryError('a query needs a year and a series');
+  }
+  // A chart holds all its tables at once. Past this a tab can run out of
+  // memory and close, so say what to change instead.
+  const each = await yearTableEstimate(manifest);
+  const tables = new Set(years).size * new Set(series).size;
+  if (each && tables > 1 && each * tables > REQUEST_BYTES) {
+    throw new Error(
+      `${tables} year tables of ${manifest.siteId} would need ${formatBytes(each * tables)} of memory at once (${formatBytes(each)} each), more than the browser can safely hold. Choose fewer years or one series.`,
+    );
   }
   const out: YearTable[] = [];
   // One series at a time (DuckDB has a single worker); all of a series'

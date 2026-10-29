@@ -18,6 +18,7 @@ import {
   loadAllManifests,
   loadSetting,
   loadSiteMeta,
+  saveManifest,
   saveSetting,
   saveSiteMeta,
 } from '@/lib/idb';
@@ -42,6 +43,7 @@ import {
 } from '@/engine/queries';
 import { unregisterSite } from '@/engine/duckdb';
 import { prefetchSite } from '@/engine/yearCache';
+import { needsSplit, splitLargeTimeseries } from '@/engine/splitTimeseries';
 import { releaseSite } from '@/engine/netcdf';
 import { DEFAULT_PIXEL_SAMPLE, DEFAULT_SELECTION_CAP, MAX_PIXEL_SAMPLE } from '@/engine/sql';
 import { newSeed, randomSample } from '@/lib/sampling';
@@ -556,16 +558,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       );
 
     patch({ status: 'loading', error: undefined });
-    const notes: string[] = [...state.manifest.warnings];
+    let manifest = state.manifest;
+    const notes: string[] = [...manifest.warnings];
 
     try {
+      // Sites imported before large time series were split: split once now.
+      if (needsSplit(manifest) && !get().ingest.active) {
+        const upgraded = await splitStoredSite(manifest);
+        if (upgraded) {
+          manifest = upgraded;
+          for (let i = notes.length - 1; i >= 0; i--) if (notes[i].includes('could not be split')) notes.splice(i, 1);
+        } else if (needsSplit(manifest)) {
+          notes.push(
+            `The time series is stored as one ${formatBytes(Math.max(...manifest.timeseries!.parts.map((p) => p.size)))} file, too large to load in the browser at once, so each year takes much longer to prepare the first time. It is split the next time the site opens.`,
+          );
+        }
+        patch({ manifest });
+      }
+
       // A stored meta with nothing in it is never trusted: an earlier read may
       // have failed. Re-read it, and say why when that fails too.
       let meta = state.meta;
       let metaError: string | null = null;
-      if (state.manifest.meta && (opts.rereadMeta || Object.keys(meta).length === 0)) {
+      if (manifest.meta && (opts.rereadMeta || Object.keys(meta).length === 0)) {
         try {
-          meta = await getSiteMeta(state.manifest);
+          meta = await getSiteMeta(manifest);
           if (Object.keys(meta).length > 0) void saveSiteMeta(siteId, meta);
           else metaError = '`pixels_meta` was read but holds no rows.';
         } catch (err) {
@@ -582,12 +599,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      const facts = await getSiteFacts(state.manifest);
+      const facts = await getSiteFacts(manifest);
 
       let geometry: PixelGeometry | null = null;
-      if (state.manifest.geom) {
+      if (manifest.geom) {
         try {
-          geometry = await getPixelGeometry(state.manifest, meta);
+          geometry = await getPixelGeometry(manifest, meta);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           // "No CRS found" is misleading when the meta itself could not be read.
@@ -599,14 +616,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      const bytesOnDisk = await siteBytes(siteId).catch(() => state.manifest.totalBytes);
+      const bytesOnDisk = await siteBytes(siteId).catch(() => manifest.totalBytes);
 
       patch({ meta, facts, geometry, bytesOnDisk, status: 'ready', notes });
 
       // Decode every year of the default series in the background, newest
       // first, so charts and year switches do not wait on a file scan.
       if (get().activeSiteId === siteId) {
-        prefetchSite(state.manifest, facts.years, facts.series.includes('spline') ? 'spline' : (facts.series[0] ?? 'spline'));
+        prefetchSite(manifest, facts.years, facts.series.includes('spline') ? 'spline' : (facts.series[0] ?? 'spline'));
       }
 
       // A load finishing in the background must not change another site's filters.
@@ -627,8 +644,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
 
       const ph = get().phenometrics;
-      if (ph.panels.length === 0 && state.manifest.netcdf.length > 0) {
-        const latest = state.manifest.netcdf[state.manifest.netcdf.length - 1];
+      if (ph.panels.length === 0 && manifest.netcdf.length > 0) {
+        const latest = manifest.netcdf[manifest.netcdf.length - 1];
         set({ phenometrics: { ...ph, panels: [{ siteId, year: latest.year }] } });
       }
     } catch (err) {
@@ -938,6 +955,40 @@ export function useOverlay(): OverlayState | null {
  * handles, query caches and the reprojected geometry. Needed before the
  * files are deleted or replaced, or later reads see the old files.
  */
+/**
+ * Split an already-imported site's oversized time series, with the import
+ * progress bar (and its Cancel). The new manifest, or null when it was
+ * cancelled or failed; the site then opens as it is, only slower.
+ */
+async function splitStoredSite(manifest: SiteManifest): Promise<SiteManifest | null> {
+  const { getState: get, setState: set } = useAppStore;
+  const controller = new AbortController();
+  set({ ingest: { ...IDLE_INGEST, active: true, controller, progress: { phase: 'Splitting the time series for the browser (once)', fraction: 0 } } });
+  try {
+    // DuckDB must let go of the old file before it is replaced.
+    await unregisterSite(manifest).catch(() => undefined);
+    const next = await splitLargeTimeseries(manifest, {
+      signal: controller.signal,
+      onProgress: (p) => set((s) => ({ ingest: { ...s.ingest, progress: p } })),
+    });
+    next.warnings = next.warnings.filter((w) => !w.includes('could not be split'));
+    await saveManifest(next);
+    await clearQueryCaches(manifest.siteId);
+    return next;
+  } catch (err) {
+    if (!controller.signal.aborted) {
+      get().toast({
+        kind: 'warning',
+        title: `${manifest.siteId}: time series not split`,
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return null;
+  } finally {
+    if (get().ingest.controller === controller) set({ ingest: IDLE_INGEST });
+  }
+}
+
 async function forgetSite(manifest: SiteManifest): Promise<void> {
   await unregisterSite(manifest).catch(() => undefined);
   await releaseSite(manifest.siteId).catch(() => undefined);

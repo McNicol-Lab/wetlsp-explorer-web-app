@@ -1,3 +1,20 @@
+**Fixed in v1.3.1: sites whose time series is over 2 GB.**
+
+- On sites such as AU-Arc (a 2.75 GB `pixels_timeseries`), Time Series and
+  *New random sample* failed with "The requested file could not be read,
+  typically due to permission problems…". The browser cannot load a file of
+  2 GB or more in one piece, and the app loaded each time series file whole
+  to prepare a year. The map was not affected.
+- On import, a time series file over 768 MB is now stored as parts of about
+  384 MB, split by pixel range, with EVI kept as 32-bit floats (the precision
+  every chart and export already used). An AU-Arc-sized file becomes four
+  parts, about half the size, in about a minute. Your original files are not
+  changed.
+- Sites imported with an earlier version are split once, the first time they
+  are opened after updating. Cancel leaves the site as it was.
+- If a file still cannot be split, charts read it in place instead of
+  failing (slower), and the message says what to do.
+
 **New in v1.3.0: compare regions, import shapefiles, overlay rasters.**
 
 - *Regions.* On the Pixel Map, switch the toolbar to *Add region* and drag
