@@ -1,3 +1,27 @@
+**Fixed in v1.3.3: large sites open and chart much faster.**
+
+- Re-importing a large site (such as BR-Npw, 12.7 GB) could leave its time
+  series unsplit, with the note "could not be split: … No OPFS access handle
+  registered". Every chart then read the whole file in place and took many
+  minutes. The split now works over parts left by an earlier import, and
+  those leftover parts (gigabytes on large sites) are deleted. Sites left
+  unsplit are split the next time they are opened.
+- The first chart of a year no longer waits for the whole site to be read.
+  The sampled pixels are read on their own, and the full year is still
+  prepared in the background. On a 222,000-pixel part of BR-Npw the first
+  chart took 1.5 s and *New random sample* 0.8 s; the numbers match the full
+  year's exactly. A clicked pixel's trace on the Pixel Map is faster too.
+- The time series is now read through the browser's fast file access. Years
+  are prepared without first loading each part into memory, a time series
+  that could not be split is read about 8 times faster, and the split and
+  the site summary after it take less time (85 s to 71 s, and 15 s to 7 s,
+  on the 2.5 GB test part).
+- While a year is still being prepared, the footer says "250 pixels sampled"
+  without the site's total; the total appears once the year is ready.
+- A random sample is now drawn from the site's mapped pixels, skipping those
+  without data that year. The same seed gives the same pixels however the data
+  is read.
+
 **Fixed in v1.3.2: sites without `pixels_meta` can be mapped.**
 
 - WetLSP geometry files also carry the site's coordinate reference system in
