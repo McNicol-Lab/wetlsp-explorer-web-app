@@ -580,11 +580,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       // have failed. Re-read it, and say why when that fails too.
       let meta = state.meta;
       let metaError: string | null = null;
-      if (manifest.meta && (opts.rereadMeta || Object.keys(meta).length === 0)) {
+      // Without `pixels_meta` the CRS can still come from the geometry file.
+      if ((manifest.meta || manifest.geom) && (opts.rereadMeta || !meta.crs_wkt)) {
         try {
           meta = await getSiteMeta(manifest);
           if (Object.keys(meta).length > 0) void saveSiteMeta(siteId, meta);
-          else metaError = '`pixels_meta` was read but holds no rows.';
+          else if (manifest.meta) metaError = '`pixels_meta` was read but holds no rows.';
         } catch (err) {
           meta = {};
           // DuckDB appends the failing SQL on later lines; the first says why.
@@ -597,6 +598,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         for (let i = notes.length - 1; i >= 0; i--) {
           if (notes[i].startsWith('Could not read `pixels_meta` while importing')) notes.splice(i, 1);
         }
+      }
+      if (!manifest.meta && meta.crs_wkt_source === 'pixels_geom') {
+        const i = notes.findIndex((n) => n.startsWith('No `pixels_meta` table found'));
+        if (i >= 0) notes[i] = NO_META_BUT_GEOM_CRS;
       }
 
       const facts = await getSiteFacts(manifest);
@@ -955,6 +960,9 @@ export function useOverlay(): OverlayState | null {
  * handles, query caches and the reprojected geometry. Needed before the
  * files are deleted or replaced, or later reads see the old files.
  */
+const NO_META_BUT_GEOM_CRS =
+  'No `pixels_meta` table found; the coordinate reference system was read from the geometry file instead.';
+
 /**
  * Split an already-imported site's oversized time series, with the import
  * progress bar (and its Cancel). The new manifest, or null when it was

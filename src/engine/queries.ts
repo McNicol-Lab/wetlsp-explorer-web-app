@@ -4,7 +4,7 @@
  */
 import * as arrow from 'apache-arrow';
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import { getDb, registerSite, tableRef } from './duckdb';
+import { crsFromFileMetadata, duckdbName, getDb, registerSite, tableRef } from './duckdb';
 import {
   buildFactsSql,
   buildWhere,
@@ -130,18 +130,29 @@ export async function getSiteMeta(
   manifest: SiteManifest,
   opts: QueryOptions = {},
 ): Promise<SiteMeta> {
-  if (!manifest.meta) return {};
+  if (!manifest.meta && !manifest.geom) return {};
   await registerSite(manifest);
-  const ref = tableRef(manifest.siteId, manifest.meta);
-  const [keyCol, valCol] = await metaColumnNames(ref);
-  const table = await simpleQuery(
-    `SELECT CAST(${quoteIdent(keyCol)} AS VARCHAR) AS k, CAST(${quoteIdent(valCol)} AS VARCHAR) AS v FROM ${ref}`,
-    opts,
-  );
-  const keys = strCol(table, 'k');
-  const vals = strCol(table, 'v');
   const meta: SiteMeta = {};
-  for (let i = 0; i < keys.length; i++) meta[keys[i]] = vals[i];
+  if (manifest.meta) {
+    const ref = tableRef(manifest.siteId, manifest.meta);
+    const [keyCol, valCol] = await metaColumnNames(ref);
+    const table = await simpleQuery(
+      `SELECT CAST(${quoteIdent(keyCol)} AS VARCHAR) AS k, CAST(${quoteIdent(valCol)} AS VARCHAR) AS v FROM ${ref}`,
+      opts,
+    );
+    const keys = strCol(table, 'k');
+    const vals = strCol(table, 'v');
+    for (let i = 0; i < keys.length; i++) meta[keys[i]] = vals[i];
+  }
+  // Without `pixels_meta` (or a CRS in it), the geometry file may say.
+  if (!meta.crs_wkt && manifest.geom) {
+    const names = manifest.geom.parts.map((p) => duckdbName(manifest.siteId, p.path));
+    const wkt = await crsFromFileMetadata(names).catch(() => null);
+    if (wkt) {
+      meta.crs_wkt = wkt;
+      meta.crs_wkt_source = 'pixels_geom';
+    }
+  }
   return meta;
 }
 
