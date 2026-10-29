@@ -88,6 +88,23 @@ export async function readSiteFile(siteId: string, relPath: string): Promise<Fil
   return handle.getFile();
 }
 
+/** Remove one stored file; nothing happens when it is already gone. */
+export async function deleteSiteFile(siteId: string, relPath: string): Promise<void> {
+  const { dirs, name } = splitPath(relPath);
+  try {
+    const dir = await dirFor([ROOT_DIR, siteId, ...dirs], { create: false });
+    await dir.removeEntry(safeSegment(name));
+  } catch (err) {
+    if (!(err instanceof DOMException && err.name === 'NotFoundError')) throw err;
+  }
+}
+
+/** The `opfs://` path DuckDB writes a stored file at: the same place `writeSiteFile` would. */
+export function siteFileOpfsPath(siteId: string, relPath: string): string {
+  const { dirs, name } = splitPath(relPath);
+  return `opfs://${[ROOT_DIR, siteId, ...dirs, name].map(safeSegment).join('/')}`;
+}
+
 export async function siteFileExists(siteId: string, relPath: string): Promise<boolean> {
   try {
     await readSiteFile(siteId, relPath);

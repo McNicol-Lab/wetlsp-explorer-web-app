@@ -326,7 +326,14 @@ export function ProgressBar({ fraction, label }: { fraction: number | null; labe
   return (
     <div className="space-y-1">
       {label && <div className="text-[11.5px] text-[var(--text-muted)] truncate">{label}</div>}
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-sunken)]">
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}
+        className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-sunken)]"
+      >
         <div
           className={clsx(
             'h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-[var(--ease-calm)]',

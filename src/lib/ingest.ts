@@ -416,9 +416,27 @@ export async function ingestEntries(
     throw err;
   }
 
-  const manifest = manifestFromDetection({ ...detection, siteId });
+  let manifest = manifestFromDetection({ ...detection, siteId });
   manifest.totalBytes = bytesWritten;
   if (opts.origin) manifest.origin = opts.origin;
+
+  // A time series too large to load in the browser is stored in parts.
+  const { needsSplit, splitLargeTimeseries } = await import('@/engine/splitTimeseries');
+  if (needsSplit(manifest)) {
+    try {
+      manifest = await splitLargeTimeseries(manifest, { signal: opts.signal, onProgress: (p) => progress(p) });
+      bytesWritten = manifest.totalBytes;
+    } catch (err) {
+      if (opts.signal?.aborted) {
+        if (isNew) await deleteSite(siteId).catch(() => undefined);
+        throw new Error('Import cancelled.');
+      }
+      // Still usable as one file, only slower; the next open tries again.
+      manifest.warnings.push(
+        `${err instanceof Error ? err.message : String(err)}. Charts still work, but each year takes much longer to prepare the first time.`,
+      );
+    }
+  }
   await saveManifest(manifest);
   await saveSiteMeta(siteId, meta);
 
