@@ -1,3 +1,15 @@
+**Fixed in v1.3.2: sites without `pixels_meta` can be mapped.**
+
+- WetLSP geometry files also carry the site's coordinate reference system in
+  their own metadata. When `pixels_meta` is missing (or has no CRS), the app
+  now reads it from there, so the pixels are placed on the map instead of
+  "the coordinate reference system is unknown". Sites already imported pick
+  it up the next time they are opened.
+- The import message no longer warns about an unknown CRS when the geometry
+  file supplies it, so a missing time series is what it reports. Time Series
+  then names the missing file (e.g. `AU_Arc_pixels_timeseries.parquet`) and
+  says to import the site again with it.
+
 **Fixed in v1.3.1: sites whose time series is over 2 GB.**
 
 - On sites such as AU-Arc (a 2.75 GB `pixels_timeseries`), Time Series and

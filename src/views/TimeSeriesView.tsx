@@ -368,7 +368,7 @@ export function TimeSeriesView() {
         <EmptyState
           icon={<LineChart size={26} />}
           title="This site has no time series table"
-          body="`pixels_timeseries.parquet` was not part of the import, so there is nothing to plot here. The Phenometrics and Overview views still work."
+          body={`The imported folder had no \`${site.manifest.siteId.replace(/-/g, '_')}_pixels_timeseries.parquet\`, so there is nothing to plot here. Import the site again with that file to see its EVI time series. The Phenometrics and Overview views still work.`}
         />
       </div>
     );

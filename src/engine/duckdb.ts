@@ -138,6 +138,25 @@ export function sqlStr(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+/**
+ * The CRS WetLSP also writes into the geometry file's own metadata (key
+ * `crs_wkt`, since September 2026), from registered DuckDB file names; null
+ * when it is not there. A site without `pixels_meta` can still be mapped.
+ */
+export async function crsFromFileMetadata(names: string[]): Promise<string | null> {
+  if (names.length === 0) return null;
+  const conn = await (await getDb()).connect();
+  try {
+    const t = await conn.query(
+      `SELECT decode(value) AS v FROM parquet_kv_metadata([${names.map(sqlStr).join(', ')}]) WHERE key = 'crs_wkt'::BLOB LIMIT 1`,
+    );
+    const v = t.numRows > 0 ? t.getChild('v')?.get(0) : null;
+    return v ? String(v) : null;
+  } finally {
+    await conn.close();
+  }
+}
+
 /** `read_parquet([...])` over every part of a logical table. */
 export function tableRef(siteId: string, table: StoredTable): string {
   const list = table.parts.map((p) => sqlStr(duckdbName(siteId, p.path))).join(', ');

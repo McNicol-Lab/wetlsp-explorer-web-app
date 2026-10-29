@@ -127,7 +127,7 @@ export function resolveCrs(wkt: string | null | undefined): CrsResolution {
   const name = wkt ? crsNameFromWkt(wkt) : null;
   if (!wkt || !wkt.trim()) {
     throw new Error(
-      'No CRS found in pixels_meta (`crs_wkt`). Pixel coordinates cannot be placed on a map.',
+      'No CRS found (`crs_wkt` in pixels_meta or in the geometry file). Pixel coordinates cannot be placed on a map.',
     );
   }
 

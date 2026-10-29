@@ -317,6 +317,27 @@ async function peekMeta(parts: IngestEntry[]): Promise<SiteMeta> {
   }
 }
 
+/** `crs_wkt` from the geometry file's own metadata, read before anything is stored. */
+async function peekGeomCrs(parts: IngestEntry[]): Promise<string | null> {
+  if (parts.length === 0) return null;
+  const [{ getDb, crsFromFileMetadata }, duckdb] = await Promise.all([
+    import('@/engine/duckdb'),
+    import('@duckdb/duckdb-wasm'),
+  ]);
+  const db = await getDb();
+  const names: string[] = [];
+  try {
+    for (const [i, part] of parts.entries()) {
+      const name = `peek_geom_${Date.now()}_${i}.parquet`;
+      await db.registerFileHandle(name, await entryAsFile(part), duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, true);
+      names.push(name);
+    }
+    return await crsFromFileMetadata(names);
+  } finally {
+    for (const n of names) await db.dropFile(n).catch(() => undefined);
+  }
+}
+
 export async function ingestEntries(
   entries: IngestEntry[],
   opts: IngestOptions = {},
@@ -357,6 +378,18 @@ export async function ingestEntries(
       const mismatch = siteIdMismatch(declared, detection.namedIds);
       if (mismatch) detection.warnings.push(mismatch);
       siteId = declared;
+    }
+    // No `pixels_meta`: the geometry file itself may carry the CRS.
+    if (!meta.crs_wkt && metaParts.length === 0) {
+      const geomParts = (detection.geom?.parts ?? [])
+        .map((p) => byPath.get(p.path))
+        .filter((e): e is IngestEntry => Boolean(e));
+      const wkt = await peekGeomCrs(geomParts).catch(() => null);
+      if (wkt) {
+        meta = { ...meta, crs_wkt: wkt, crs_wkt_source: 'pixels_geom' };
+        const i = detection.warnings.findIndex((w) => w.startsWith('No `pixels_meta` table found'));
+        if (i >= 0) detection.warnings.splice(i, 1);
+      }
     }
   } catch (err) {
     // Detection already produced a usable id; the meta is re-read when the
