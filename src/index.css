@@ -187,6 +187,38 @@
       background-position: 0 50%;
     }
   }
+  /* Progress whose total is unknown: a segment that keeps travelling. */
+  .progress-indeterminate {
+    width: 35%;
+    animation: progress-travel 1.5s var(--ease-calm) infinite;
+  }
+  @keyframes progress-travel {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(300%);
+    }
+  }
+  /* A slow sheen over the filled part: the work is alive between updates. */
+  .progress-live {
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-live::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, white 35%, transparent), transparent);
+    transform: translateX(-100%);
+    animation: progress-sheen 2.2s ease-in-out infinite;
+  }
+  @keyframes progress-sheen {
+    60%,
+    100% {
+      transform: translateX(100%);
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -195,6 +227,14 @@
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  /* A looping animation at 0.01ms would flicker: hold these still instead. */
+  .progress-indeterminate {
+    animation: none !important;
+    transform: translateX(100%);
+  }
+  .progress-live::after {
+    display: none;
   }
 }
 
