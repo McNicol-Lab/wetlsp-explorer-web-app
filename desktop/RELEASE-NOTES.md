@@ -1,3 +1,24 @@
+**Faster in v1.3.4: large sites import about three times faster, with a clearer progress bar.**
+
+- The one-time split of a large time series (any `pixels_timeseries` over
+  768 MB) now writes several parts at once, on up to four processor cores.
+  On a 10-core Mac, BR-Npw (12.7 GB) is split in about 2 minutes instead of
+  about 6, and a 2.5 GB part of it imports in 38 s instead of 82 s.
+- The time series is split straight from the files you drop, rather than
+  copied into the app first. Importing BR-Npw needs room for its 3.7 GB of
+  parts, not for the 12.7 GB file as well. Your original files are not
+  changed.
+- The parts take about a quarter less space than in v1.3.3 and are a little
+  faster to read. Charts and statistics are unchanged.
+- The progress bar moves smoothly instead of jumping a part at a time. It
+  shows how much is done ("4.8 GB of 11.9 GB · 7 of 18 parts done · 4 in
+  parallel"), about how long is left, and why the step happens. The
+  percentage also shows in the browser tab and, in the desktop app, on the
+  Dock or taskbar icon. The rest of the app stays usable meanwhile.
+- Cancel stops an import at once, also part way through copying a file.
+  Cancelling a new import of a site you already have leaves that site's time
+  series as it was.
+
 **Fixed in v1.3.3: large sites open and chart much faster.**
 
 - Re-importing a large site (such as BR-Npw, 12.7 GB) could leave its time

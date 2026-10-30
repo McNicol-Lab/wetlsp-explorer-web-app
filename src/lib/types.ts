@@ -160,4 +160,8 @@ export interface ProgressEvent {
   /** 0..1, or null when the total is unknown. */
   fraction: number | null;
   detail?: string;
+  /** Bytes of the phase's input dealt with so far, of all of them. */
+  bytes?: { done: number; total: number };
+  /** How the phase is going, in a few words: "7 of 18 parts done · 4 in parallel". */
+  note?: string;
 }

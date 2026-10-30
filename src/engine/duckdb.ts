@@ -58,11 +58,40 @@ export function engineStatus(): EngineStatus {
   return status;
 }
 
+/** A DuckDB instance in a worker of its own. */
+async function boot(
+  bundle: duckdb.DuckDBBundle,
+  onProgress?: (p: duckdb.InstantiationProgress) => void,
+): Promise<duckdb.AsyncDuckDB> {
+  const worker = new Worker(bundle.mainWorker!);
+  try {
+    const instance = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), worker);
+    await instance.instantiate(bundle.mainModule, bundle.pthreadWorker, onProgress);
+    await instance.open({
+      query: { castBigIntToDouble: true, castTimestampToDate: true },
+    });
+    return instance;
+  } catch (err) {
+    worker.terminate();
+    throw err;
+  }
+}
+
+/**
+ * Another engine beside the app's own, for work that would otherwise hold
+ * the app's single worker for minutes (the time series split runs several
+ * side by side). The caller terminates it.
+ */
+export async function startEngine(): Promise<duckdb.AsyncDuckDB> {
+  // The app's engine first: it caches the bundle, so this one starts offline too.
+  await getDb();
+  return boot(await duckdb.selectBundle(BUNDLES));
+}
+
 export async function getDb(): Promise<duckdb.AsyncDuckDB> {
   if (db) return db;
   booting ??= (async () => {
     setStatus({ state: 'loading', bytesLoaded: 0, bytesTotal: 0 });
-    let worker: Worker | undefined;
     try {
       const bundle = await duckdb.selectBundle(BUNDLES);
       // The initial page can start DuckDB before the service worker claims it.
@@ -70,14 +99,8 @@ export async function getDb(): Promise<duckdb.AsyncDuckDB> {
       // A storage quota failure must not prevent online exploration. The explicit
       // "Prepare for offline" action below checks again and reports any failure.
       await cacheEngineBundle(bundle).catch(() => undefined);
-      worker = new Worker(bundle.mainWorker!);
-      const logger = new duckdb.VoidLogger();
-      const instance = new duckdb.AsyncDuckDB(logger, worker);
-      await instance.instantiate(bundle.mainModule, bundle.pthreadWorker, (p) => {
+      const instance = await boot(bundle, (p) => {
         setStatus({ bytesLoaded: p.bytesLoaded, bytesTotal: p.bytesTotal });
-      });
-      await instance.open({
-        query: { castBigIntToDouble: true, castTimestampToDate: true },
       });
       db = instance;
       setStatus({
@@ -90,7 +113,6 @@ export async function getDb(): Promise<duckdb.AsyncDuckDB> {
       });
       return instance;
     } catch (err) {
-      worker?.terminate();
       booting = null;
       const message = err instanceof Error ? err.message : String(err);
       setStatus({ state: 'error', error: message });

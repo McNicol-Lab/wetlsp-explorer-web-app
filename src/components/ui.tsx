@@ -322,7 +322,19 @@ export function Skeleton({ className }: { className?: string }) {
   return <div className={clsx('skeleton', className)} />;
 }
 
-export function ProgressBar({ fraction, label }: { fraction: number | null; label?: string }) {
+export function ProgressBar({
+  fraction,
+  label,
+  valueText,
+  live = false,
+}: {
+  fraction: number | null;
+  label?: string;
+  /** What a screen reader says for the value, e.g. "38%, about 2 min left". */
+  valueText?: string;
+  /** Long work: a slow sheen shows it is still going between updates. */
+  live?: boolean;
+}) {
   return (
     <div className="space-y-1">
       {label && <div className="text-[11.5px] text-[var(--text-muted)] truncate">{label}</div>}
@@ -332,14 +344,19 @@ export function ProgressBar({ fraction, label }: { fraction: number | null; labe
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}
+        aria-valuetext={valueText}
         className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-sunken)]"
       >
         <div
           className={clsx(
-            'h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-[var(--ease-calm)]',
-            fraction === null && 'animate-pulse w-1/3',
+            'h-full rounded-full bg-[var(--accent)]',
+            fraction === null
+              ? 'progress-indeterminate'
+              : // Updates come a few times a second: glide between them, never step.
+                'transition-[width] duration-500 ease-linear',
+            fraction !== null && live && 'progress-live',
           )}
-          style={fraction === null ? undefined : { width: `${Math.round(fraction * 100)}%` }}
+          style={fraction === null ? undefined : { width: `${(Math.min(1, Math.max(0, fraction)) * 100).toFixed(2)}%` }}
         />
       </div>
     </div>

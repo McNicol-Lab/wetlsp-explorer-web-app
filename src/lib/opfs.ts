@@ -61,6 +61,7 @@ export async function writeSiteFile(
   siteId: string,
   relPath: string,
   data: Blob | ArrayBuffer | ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
 ): Promise<number> {
   const { dirs, name } = splitPath(relPath);
   const dir = await dirFor([ROOT_DIR, siteId, ...dirs], { create: true });
@@ -68,7 +69,8 @@ export async function writeSiteFile(
   const writable = await handle.createWritable();
   try {
     if (data instanceof ReadableStream) {
-      await data.pipeTo(writable, { preventClose: true });
+      // Aborting leaves the file as it was: the writes go to a swap file until close.
+      await data.pipeTo(writable, { preventClose: true, preventAbort: true, signal });
       await writable.close();
     } else {
       await writable.write(data);

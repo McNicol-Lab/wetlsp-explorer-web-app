@@ -70,6 +70,12 @@ async function createWindow() {
     if (!url.startsWith(ORIGIN + '/')) event.preventDefault();
   });
   window.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  // A long import puts its progress in the page title ("38% · …"): show it
+  // on the Dock or taskbar icon too, so it can be followed from another app.
+  window.on('page-title-updated', (_event, title) => {
+    const percent = /^(\d{1,3})% · /.exec(title);
+    window?.setProgressBar(percent ? Math.min(100, Number(percent[1])) / 100 : -1);
+  });
   window.on('closed', () => { window = undefined; });
   await window.loadURL(ORIGIN);
 }
