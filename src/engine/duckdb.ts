@@ -7,7 +7,7 @@
  */
 import * as duckdb from '@duckdb/duckdb-wasm';
 import type { SiteManifest, StoredTable } from '@/lib/types';
-import { readSiteFile } from '@/lib/opfs';
+import { readSiteFile, siteFileHandle } from '@/lib/opfs';
 import { cacheEngineBundle, requireOfflineShell } from './offline';
 
 const BASE = import.meta.env.BASE_URL;
@@ -58,11 +58,40 @@ export function engineStatus(): EngineStatus {
   return status;
 }
 
+/** A DuckDB instance in a worker of its own. */
+async function boot(
+  bundle: duckdb.DuckDBBundle,
+  onProgress?: (p: duckdb.InstantiationProgress) => void,
+): Promise<duckdb.AsyncDuckDB> {
+  const worker = new Worker(bundle.mainWorker!);
+  try {
+    const instance = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), worker);
+    await instance.instantiate(bundle.mainModule, bundle.pthreadWorker, onProgress);
+    await instance.open({
+      query: { castBigIntToDouble: true, castTimestampToDate: true },
+    });
+    return instance;
+  } catch (err) {
+    worker.terminate();
+    throw err;
+  }
+}
+
+/**
+ * Another engine beside the app's own, for work that would otherwise hold
+ * the app's single worker for minutes (the time series split runs several
+ * side by side). The caller terminates it.
+ */
+export async function startEngine(): Promise<duckdb.AsyncDuckDB> {
+  // The app's engine first: it caches the bundle, so this one starts offline too.
+  await getDb();
+  return boot(await duckdb.selectBundle(BUNDLES));
+}
+
 export async function getDb(): Promise<duckdb.AsyncDuckDB> {
   if (db) return db;
   booting ??= (async () => {
     setStatus({ state: 'loading', bytesLoaded: 0, bytesTotal: 0 });
-    let worker: Worker | undefined;
     try {
       const bundle = await duckdb.selectBundle(BUNDLES);
       // The initial page can start DuckDB before the service worker claims it.
@@ -70,14 +99,8 @@ export async function getDb(): Promise<duckdb.AsyncDuckDB> {
       // A storage quota failure must not prevent online exploration. The explicit
       // "Prepare for offline" action below checks again and reports any failure.
       await cacheEngineBundle(bundle).catch(() => undefined);
-      worker = new Worker(bundle.mainWorker!);
-      const logger = new duckdb.VoidLogger();
-      const instance = new duckdb.AsyncDuckDB(logger, worker);
-      await instance.instantiate(bundle.mainModule, bundle.pthreadWorker, (p) => {
+      const instance = await boot(bundle, (p) => {
         setStatus({ bytesLoaded: p.bytesLoaded, bytesTotal: p.bytesTotal });
-      });
-      await instance.open({
-        query: { castBigIntToDouble: true, castTimestampToDate: true },
       });
       db = instance;
       setStatus({
@@ -90,7 +113,6 @@ export async function getDb(): Promise<duckdb.AsyncDuckDB> {
       });
       return instance;
     } catch (err) {
-      worker?.terminate();
       booting = null;
       const message = err instanceof Error ? err.message : String(err);
       setStatus({ state: 'error', error: message });
@@ -188,11 +210,80 @@ export async function registerSite(manifest: SiteManifest): Promise<void> {
     }
   }
   registered.set(manifest.siteId, done);
+  if (manifest.timeseries) {
+    // Once per registration: a second handle on a file cannot be opened.
+    let opening = fastOpening.get(manifest.siteId);
+    if (!opening) {
+      opening = registerFast(manifest.siteId, manifest.timeseries);
+      fastOpening.set(manifest.siteId, opening);
+    }
+    await opening;
+  }
+}
+
+/*
+ * The time series parts are also opened with OPFS sync access handles
+ * (BROWSER_FSACCESS), which DuckDB reads in place as fast as a loaded buffer:
+ * on BR-Npw parts a 329-pixel read took 0.57 s against 9.8 s through the
+ * File reader, and a year scan of one part 5.6 s against 44 s. A handle locks
+ * its file against writes and deletes until it is dropped (unregisterSite),
+ * and another tab holding one makes opening fail: then the File-reader names
+ * are used, only slower.
+ */
+const fast = new Map<string, Set<string> | null>();
+const fastOpening = new Map<string, Promise<void>>();
+
+/** DuckDB-visible name of a time series part opened with a sync access handle. */
+export function duckdbFastName(siteId: string, relPath: string): string {
+  return `site_${siteId.replace(/[^\w.-]/g, '_')}/g${generation.get(siteId) ?? 0}/fast/${relPath}`;
+}
+
+async function registerFast(siteId: string, table: StoredTable): Promise<void> {
+  const instance = await getDb();
+  const opened = new Set<string>();
+  try {
+    for (const part of table.parts) {
+      const handle = await siteFileHandle(siteId, part.path);
+      await instance.registerFileHandle(
+        duckdbFastName(siteId, part.path),
+        handle,
+        duckdb.DuckDBDataProtocol.BROWSER_FSACCESS,
+        true,
+      );
+      opened.add(part.path);
+    }
+    fast.set(siteId, opened);
+  } catch {
+    for (const path of opened) await instance.dropFile(duckdbFastName(siteId, path)).catch(() => undefined);
+    fast.set(siteId, null);
+  }
+}
+
+/** True when this time series part is open with a sync access handle (after registerSite). */
+export function readsInPlace(siteId: string, relPath: string): boolean {
+  return Boolean(fast.get(siteId)?.has(relPath));
+}
+
+/** The name to read one time series part by: its sync-access-handle name when it has one. */
+export function timeseriesPartName(siteId: string, relPath: string): string {
+  return readsInPlace(siteId, relPath) ? duckdbFastName(siteId, relPath) : duckdbName(siteId, relPath);
+}
+
+/** `read_parquet([...])` over the time series, by the fastest names registered (after registerSite). */
+export function timeseriesRef(siteId: string, table: StoredTable): string {
+  const list = table.parts.map((p) => sqlStr(timeseriesPartName(siteId, p.path))).join(', ');
+  return `read_parquet([${list}], union_by_name = true)`;
 }
 
 export async function unregisterSite(manifest: SiteManifest): Promise<void> {
   if (!db) return;
   const done = registered.get(manifest.siteId);
+  await fastOpening.get(manifest.siteId);
+  fastOpening.delete(manifest.siteId);
+  const opened = fast.get(manifest.siteId);
+  fast.delete(manifest.siteId);
+  // Closes the sync access handles, so the parts can be replaced or deleted.
+  for (const path of opened ?? []) await db.dropFile(duckdbFastName(manifest.siteId, path)).catch(() => undefined);
   if (!done) return;
   for (const path of done) {
     try {

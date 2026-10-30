@@ -43,7 +43,7 @@ import {
 } from '@/engine/queries';
 import { unregisterSite } from '@/engine/duckdb';
 import { prefetchSite } from '@/engine/yearCache';
-import { needsSplit, splitLargeTimeseries } from '@/engine/splitTimeseries';
+import { needsSplit, removeStaleParts, splitLargeTimeseries, SPLIT_PHASE } from '@/engine/splitTimeseries';
 import { releaseSite } from '@/engine/netcdf';
 import { DEFAULT_PIXEL_SAMPLE, DEFAULT_SELECTION_CAP, MAX_PIXEL_SAMPLE } from '@/engine/sql';
 import { newSeed, randomSample } from '@/lib/sampling';
@@ -621,6 +621,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
+      // Parts an earlier import or a failed split left behind (never while one is writing).
+      if (!get().ingest.active) await removeStaleParts(manifest).catch(() => undefined);
       const bytesOnDisk = await siteBytes(siteId).catch(() => manifest.totalBytes);
 
       patch({ meta, facts, geometry, bytesOnDisk, status: 'ready', notes });
@@ -971,13 +973,13 @@ const NO_META_BUT_GEOM_CRS =
 async function splitStoredSite(manifest: SiteManifest): Promise<SiteManifest | null> {
   const { getState: get, setState: set } = useAppStore;
   const controller = new AbortController();
-  set({ ingest: { ...IDLE_INGEST, active: true, controller, progress: { phase: 'Splitting the time series for the browser (once)', fraction: 0 } } });
+  set({ ingest: { ...IDLE_INGEST, active: true, controller, progress: { phase: SPLIT_PHASE, fraction: 0 } } });
   try {
     // DuckDB must let go of the old file before it is replaced.
     await unregisterSite(manifest).catch(() => undefined);
     const next = await splitLargeTimeseries(manifest, {
       signal: controller.signal,
-      onProgress: (p) => set((s) => ({ ingest: { ...s.ingest, progress: p } })),
+      onProgress: (p) => get().ingest.controller === controller && set((s) => ({ ingest: { ...s.ingest, progress: p } })),
     });
     next.warnings = next.warnings.filter((w) => !w.includes('could not be split'));
     await saveManifest(next);
@@ -1066,13 +1068,16 @@ async function runImport(jobs: ImportJob[]): Promise<void> {
   const skipped: string[] = [];
   const failed: Array<{ label: string; message: string }> = [];
   set({ ingest: { ...IDLE_INGEST, active: true, controller } });
+  // Cancel ends an import at once, but its clean-up can still be running when
+  // the next one starts: only the import on screen may change the bar.
+  const mine = () => get().ingest.controller === controller;
 
   try {
     for (const [index, job] of jobs.entries()) {
       if (controller.signal.aborted) break;
       const label = job.hint ?? `site ${index + 1}`;
       const queue = jobs.length > 1 ? { index, total: jobs.length, label } : null;
-      set((s) => ({ ingest: { ...s.ingest, queue, progress: null } }));
+      if (mine()) set((s) => ({ ingest: { ...s.ingest, queue, progress: null } }));
       const canSkip = index < jobs.length - 1;
       try {
         let result: Awaited<ReturnType<typeof ingestEntries>> | null = null;
@@ -1089,7 +1094,7 @@ async function runImport(jobs: ImportJob[]): Promise<void> {
                 const existing = get().sites[siteId];
                 if (existing) await forgetSite(existing.manifest);
               },
-              onProgress: (p) => set((s) => ({ ingest: { ...s.ingest, progress: p } })),
+              onProgress: (p) => mine() && set((s) => ({ ingest: { ...s.ingest, progress: p } })),
             });
           } catch (err) {
             if (!isQuotaError(err) || controller.signal.aborted) throw err;
@@ -1144,7 +1149,7 @@ async function runImport(jobs: ImportJob[]): Promise<void> {
       }
     }
   } finally {
-    set({ ingest: IDLE_INGEST, spaceRequest: null });
+    if (mine()) set({ ingest: IDLE_INGEST, spaceRequest: null });
     void get().refreshStorage();
   }
 

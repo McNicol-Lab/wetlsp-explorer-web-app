@@ -57,7 +57,8 @@ interface Loaded {
   bundle: TimeseriesBundle;
   summary: DailySummaryRow[];
   requestedPixels: number;
-  availablePixels: number;
+  /** Pixels with data; null while the year is still being prepared. */
+  availablePixels: number | null;
   usedSelection: boolean;
 }
 
@@ -65,8 +66,13 @@ interface YearsLoaded {
   summary: DailySummaryRow[];
   years: number[];
   pixels: number;
-  availablePixels: number;
+  availablePixels: number | null;
   usedSelection: boolean;
+}
+
+/** "250 of 700,434", or "250" while the number with data is not yet known. */
+function ofAvailable(shown: number, available: number | null): string {
+  return available === null ? formatCount(shown) : `${formatCount(shown)} of ${formatCount(available)}`;
 }
 
 /** Up to this many selected pixels are drawn as individual, labelled lines. */
@@ -89,8 +95,9 @@ async function pixelIdsFor(
   selection: number[],
   maxPixels: number,
   seed: number,
+  candidates: Int32Array | null,
   ctx: { signal: AbortSignal; onProgress: (p: import('@/lib/types').ProgressEvent) => void },
-): Promise<{ ids: Int32Array; available: number }> {
+): Promise<{ ids: Int32Array; available: number | null }> {
   if (useSelection) {
     if (selection.length === 0) {
       throw new Error(
@@ -99,7 +106,7 @@ async function pixelIdsFor(
     }
     return { ids: Int32Array.from(selection), available: selection.length };
   }
-  return samplePixelIds(manifest, years, series, maxPixels, { ...ctx, seed });
+  return samplePixelIds(manifest, years, series, maxPixels, { ...ctx, seed, candidates });
 }
 
 function useTimeseriesData() {
@@ -109,6 +116,8 @@ function useTimeseriesData() {
   const setPlottedPixels = useAppStore((s) => s.setPlottedPixels);
 
   const manifest = site?.manifest ?? null;
+  // The mapped pixels: a sample drawn from them can be read without a year scan.
+  const candidates = site?.geometry?.pixelId ?? null;
   const year = ts.year;
   const seriesKey = ts.series.join(',');
   const selectionKey = ts.useSelection ? selection.join(',') : '';
@@ -124,7 +133,7 @@ function useTimeseriesData() {
       if (!manifest || year === null) throw new Error('No site selected.');
       const years = [year];
       const { ids: pixelIds, available } = await pixelIdsFor(
-        manifest, years, ts.series, ts.useSelection, selection, ts.maxPixels, ts.sampleSeed, { signal, onProgress },
+        manifest, years, ts.series, ts.useSelection, selection, ts.maxPixels, ts.sampleSeed, candidates, { signal, onProgress },
       );
       if (pixelIds.length === 0) {
         throw new Error(`No pixels carry ${ts.series.join(' or ')} data for ${year}.`);
@@ -145,7 +154,7 @@ function useTimeseriesData() {
         usedSelection: ts.useSelection,
       };
     },
-    [manifest?.siteId, year, seriesKey, ts.maxPixels, selectionKey, rangeKey, ts.useSelection, ts.sampleSeed],
+    [manifest?.siteId, year, seriesKey, ts.maxPixels, selectionKey, rangeKey, ts.useSelection, ts.sampleSeed, candidates],
     { enabled, keepPrevious: true },
   );
 }
@@ -156,6 +165,8 @@ function useYearsData() {
   const ts = useAppStore((s) => s.timeseries);
   const selection = useAppStore((s) => s.selection);
   const manifest = site?.manifest ?? null;
+  // The mapped pixels: a sample drawn from them can be read without a year scan.
+  const candidates = site?.geometry?.pixelId ?? null;
   const years = site?.facts?.years ?? [];
   const selectionKey = ts.useSelection ? selection.join(',') : '';
   const enabled = Boolean(
@@ -166,7 +177,7 @@ function useYearsData() {
     async ({ signal, onProgress }) => {
       if (!manifest) throw new Error('No site selected.');
       const { ids, available } = await pixelIdsFor(
-        manifest, years, ts.series, ts.useSelection, selection, ts.maxPixels, ts.sampleSeed, { signal, onProgress },
+        manifest, years, ts.series, ts.useSelection, selection, ts.maxPixels, ts.sampleSeed, candidates, { signal, onProgress },
       );
       if (ids.length === 0) throw new Error(`No pixels carry ${ts.series.join(' or ')} data.`);
       const summary = await getDailySummary(
@@ -182,7 +193,7 @@ function useYearsData() {
         usedSelection: ts.useSelection,
       };
     },
-    [manifest?.siteId, years.join(','), ts.series.join(','), ts.maxPixels, selectionKey, ts.useSelection, ts.sampleSeed],
+    [manifest?.siteId, years.join(','), ts.series.join(','), ts.maxPixels, selectionKey, ts.useSelection, ts.sampleSeed, candidates],
     { enabled, keepPrevious: true },
   );
 }
@@ -312,7 +323,7 @@ export function TimeSeriesView() {
       if (!d) return null;
       const sample = d.usedSelection
         ? `${formatCount(d.pixels)} selected pixels`
-        : `${formatCount(d.pixels)} of ${formatCount(d.availablePixels)} pixels (random sample)`;
+        : `${ofAvailable(d.pixels, d.availablePixels)} pixels (random sample)`;
       return {
         title: `${siteId} · ${seriesLabel} EVI · ${d.years[0]}–${d.years[d.years.length - 1]}`,
         subtitle: `${siteName ? `${siteName} · ` : ''}daily mean per year · ${sample}`,
@@ -327,7 +338,7 @@ export function TimeSeriesView() {
     const range = ts.dateRange ? `${ts.dateRange[0]} to ${ts.dateRange[1]}` : `${ts.year}`;
     const sample = d.usedSelection
       ? `${formatCount(d.bundle.pixelsLoaded)} selected pixels`
-      : `${formatCount(d.bundle.pixelsLoaded)} of ${formatCount(d.availablePixels)} pixels (random sample)`;
+      : `${ofAvailable(d.bundle.pixelsLoaded, d.availablePixels)} pixels (random sample)`;
     const layers = [
       ts.showMean && 'the daily mean (bold line)',
       ts.showIqr && chart === 'line' && 'the interquartile range across pixels (band)',
@@ -759,19 +770,19 @@ function StatusFooter({
   } else if (chart === 'years' && yearsState.data) {
     const d = yearsState.data;
     parts.push(`${d.years.length} years`);
-    parts.push(d.usedSelection ? `${formatCount(d.pixels)} selected pixels` : `${formatCount(d.pixels)} of ${formatCount(d.availablePixels)} pixels sampled`);
+    parts.push(d.usedSelection ? `${formatCount(d.pixels)} selected pixels` : `${ofAvailable(d.pixels, d.availablePixels)} pixels sampled`);
     parts.push(`${formatCount(d.summary.length)} daily means`);
-    sampled = !d.usedSelection && d.availablePixels > d.pixels;
+    sampled = !d.usedSelection && (d.availablePixels === null || d.availablePixels > d.pixels);
   } else if (chart !== 'years' && lineState.data) {
     const d = lineState.data;
     parts.push(`${formatCount(d.bundle.rows)} rows`);
     parts.push(
       d.usedSelection
         ? `${formatCount(d.bundle.pixelsLoaded)} selected pixels`
-        : `${formatCount(d.bundle.pixelsLoaded)} of ${formatCount(d.availablePixels)} pixels sampled`,
+        : `${ofAvailable(d.bundle.pixelsLoaded, d.availablePixels)} pixels sampled`,
     );
     if (d.summary.length) parts.push(`${formatCount(d.summary.length)} daily aggregates`);
-    sampled = !d.usedSelection && d.availablePixels > d.bundle.pixelsLoaded;
+    sampled = !d.usedSelection && (d.availablePixels === null || d.availablePixels > d.bundle.pixelsLoaded);
   }
 
   return (

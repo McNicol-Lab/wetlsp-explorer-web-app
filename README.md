@@ -99,12 +99,15 @@ again from **Settings → Sample sites**.
 
 **Large sites.** A browser cannot load a file of 2 GB or more into memory in
 one piece, and several published sites have a larger `pixels_timeseries`
-(AU-Arc 2.75 GB; ID-Pag, US-ORv and MY-MLM 12–19 GB). On import, a time
-series file over 768 MB is therefore stored as parts of about 384 MB, split
-by pixel range, with EVI kept as 32-bit floats: the precision every chart and
-export already used, and about half the space. Your original files are not
-changed. Sites imported with an earlier version are split once, the first
-time they are opened. The first chart of each year still takes a while on a
+(AU-Arc 2.75 GB; BR-Npw 12.7 GB; ID-Pag, US-ORv and MY-MLM 12–19 GB). On
+import, a time series file over 768 MB is therefore stored as parts of at most
+about 384 MB, split by pixel range, with EVI kept as 32-bit floats: the
+precision every chart and export already used. The parts take under a third
+of the space (BR-Npw: 3.7 GB) and are written several at a time, on up to four
+processor cores, straight from the file you dropped, so the import needs room
+for the parts only: BR-Npw takes about 2 minutes on a recent Mac. Your
+original files are not changed. Sites imported with an earlier version are
+split once, the first time they are opened. The first chart of each year still takes a while on a
 large site (about 30 s on AU-Arc); after that the year opens at once, also
 offline. One year of a site with about 1.5 million pixels needs about 2 GB of
 memory, so the app prepares those one year at a time, and asks for fewer
@@ -247,7 +250,7 @@ method, the data, and the imagery provider, and acknowledge the ecoϕlab.
 
 **This app**
 
-- Sagole, B., & Kumar, P. (2026). *WetLSP Explorer* (Version 1.3.2)
+- Sagole, B., & Kumar, P. (2026). *WetLSP Explorer* (Version 1.3.4)
   [Computer software]. <https://github.com/McNicol-Lab/wetlsp-explorer-web-app>
 
 ## Acknowledgments

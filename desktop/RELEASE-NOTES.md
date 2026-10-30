@@ -1,3 +1,48 @@
+**Faster in v1.3.4: large sites import about three times faster, with a clearer progress bar.**
+
+- The one-time split of a large time series (any `pixels_timeseries` over
+  768 MB) now writes several parts at once, on up to four processor cores.
+  On a 10-core Mac, BR-Npw (12.7 GB) is split in about 2 minutes instead of
+  about 6, and a 2.5 GB part of it imports in 38 s instead of 82 s.
+- The time series is split straight from the files you drop, rather than
+  copied into the app first. Importing BR-Npw needs room for its 3.7 GB of
+  parts, not for the 12.7 GB file as well. Your original files are not
+  changed.
+- The parts take about a quarter less space than in v1.3.3 and are a little
+  faster to read. Charts and statistics are unchanged.
+- The progress bar moves smoothly instead of jumping a part at a time. It
+  shows how much is done ("4.8 GB of 11.9 GB · 7 of 18 parts done · 4 in
+  parallel"), about how long is left, and why the step happens. The
+  percentage also shows in the browser tab and, in the desktop app, on the
+  Dock or taskbar icon. The rest of the app stays usable meanwhile.
+- Cancel stops an import at once, also part way through copying a file.
+  Cancelling a new import of a site you already have leaves that site's time
+  series as it was.
+
+**Fixed in v1.3.3: large sites open and chart much faster.**
+
+- Re-importing a large site (such as BR-Npw, 12.7 GB) could leave its time
+  series unsplit, with the note "could not be split: … No OPFS access handle
+  registered". Every chart then read the whole file in place and took many
+  minutes. The split now works over parts left by an earlier import, and
+  those leftover parts (gigabytes on large sites) are deleted. Sites left
+  unsplit are split the next time they are opened.
+- The first chart of a year no longer waits for the whole site to be read.
+  The sampled pixels are read on their own, and the full year is still
+  prepared in the background. On a 222,000-pixel part of BR-Npw the first
+  chart took 1.5 s and *New random sample* 0.8 s; the numbers match the full
+  year's exactly. A clicked pixel's trace on the Pixel Map is faster too.
+- The time series is now read through the browser's fast file access. Years
+  are prepared without first loading each part into memory, a time series
+  that could not be split is read about 8 times faster, and the split and
+  the site summary after it take less time (85 s to 71 s, and 15 s to 7 s,
+  on the 2.5 GB test part).
+- While a year is still being prepared, the footer says "250 pixels sampled"
+  without the site's total; the total appears once the year is ready.
+- A random sample is now drawn from the site's mapped pixels, skipping those
+  without data that year. The same seed gives the same pixels however the data
+  is read.
+
 **Fixed in v1.3.2: sites without `pixels_meta` can be mapped.**
 
 - WetLSP geometry files also carry the site's coordinate reference system in

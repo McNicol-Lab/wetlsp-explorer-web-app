@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { randomSample } from './sampling';
+import { randomSample, SeededDraw } from './sampling';
 
 const range = (n: number) => Int32Array.from({ length: n }, (_, i) => i);
 
@@ -36,5 +36,23 @@ describe('randomSample', () => {
     const pool = range(100);
     randomSample(pool, 10, 3);
     expect(Array.from(pool)).toEqual(Array.from(range(100)));
+  });
+});
+
+describe('SeededDraw', () => {
+  it('hands out the randomSample draw in pieces, in draw order', () => {
+    const pool = range(20_000);
+    const draw = new SeededDraw(pool, 11);
+    const taken = [...draw.take(100), ...draw.take(1), ...draw.take(149)];
+    expect(taken.sort((a, b) => a - b)).toEqual(Array.from(randomSample(pool, 250, 11)));
+    expect(draw.remaining).toBe(20_000 - 250);
+  });
+
+  it('stops at the end of the pool', () => {
+    const draw = new SeededDraw(Int32Array.of(4, 8, 15), 2);
+    expect(draw.take(2).length).toBe(2);
+    expect(draw.take(5).length).toBe(1);
+    expect(draw.take(5).length).toBe(0);
+    expect(draw.remaining).toBe(0);
   });
 });

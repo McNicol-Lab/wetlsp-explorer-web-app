@@ -18,6 +18,7 @@ import {
 import { loadManifest, saveManifest, saveSiteMeta } from './idb';
 import { deleteSite, requestPersistence, writeSiteFile } from './opfs';
 import { isZipPath, listZip, openZipMember } from './zip';
+import { SPLIT_ABOVE_BYTES } from './splitPlan';
 import type { ProgressEvent, SiteManifest, SiteMeta } from './types';
 
 export interface IngestEntry {
@@ -215,10 +216,15 @@ async function copyWithRetry(
   for (let attempt = 1; ; attempt++) {
     let counted = 0;
     try {
-      return await copyToOpfs(siteId, entry, (n) => {
-        counted += n;
-        onBytes(n);
-      });
+      return await copyToOpfs(
+        siteId,
+        entry,
+        (n) => {
+          counted += n;
+          onBytes(n);
+        },
+        signal,
+      );
     } catch (err) {
       onBytes(-counted);
       const quota = err instanceof DOMException && err.name === 'QuotaExceededError';
@@ -233,6 +239,7 @@ async function copyToOpfs(
   siteId: string,
   entry: IngestEntry,
   onBytes: (n: number) => void,
+  signal?: AbortSignal,
 ): Promise<number> {
   // Small files go through a single write; big ones stream so the whole parquet
   // is never resident in JS memory at once.
@@ -249,7 +256,7 @@ async function copyToOpfs(
       controller.enqueue(chunk);
     },
   });
-  await writeSiteFile(siteId, entry.path, (await openEntry(entry)).pipeThrough(counter));
+  await writeSiteFile(siteId, entry.path, (await openEntry(entry)).pipeThrough(counter), signal);
   return written;
 }
 
@@ -411,38 +418,54 @@ export async function ingestEntries(
       ...detection.readme,
     ].map((f) => f.path),
   );
-  const toCopy = files.filter((f) => keep.has(f.path));
-  const total = toCopy.reduce((s, e) => s + e.size, 0);
+  // A time series too large to load in the browser is stored in parts, split
+  // straight from the dropped file: copying it first wrote 12.7 GB for BR-Npw
+  // only to read it back and delete it, and needed room for both at once.
+  // Archive members and downloads are streams, and are copied first.
+  const { needsSplit, removeStaleParts, splitLargeTimeseries, splitSizeEstimate } = await import(
+    '@/engine/splitTimeseries'
+  );
+  const direct = new Map<string, File>();
+  for (const part of detection.timeseries?.parts ?? []) {
+    const file = byPath.get(part.path)?.file;
+    if (file && part.size > SPLIT_ABOVE_BYTES) direct.set(part.path, file);
+  }
+  const toCopy = files.filter((f) => keep.has(f.path) && !direct.has(f.path));
+  let splitBytes = 0;
+  for (const file of direct.values()) splitBytes += (await splitSizeEstimate(file)) ?? file.size;
 
-  await opts.ensureSpace?.(siteId, total);
+  await opts.ensureSpace?.(siteId, toCopy.reduce((s, e) => s + e.size, 0) + splitBytes);
   await requestPersistence();
 
   const isNew = !(await loadManifest(siteId));
-  const phase = toCopy.some((e) => e.retryable) ? 'Downloading' : 'Copying into offline storage';
-  let done = 0;
   let bytesWritten = 0;
-  try {
-    for (const entry of toCopy) {
-      if (opts.signal?.aborted) throw new Error('Import cancelled.');
+  const copyAll = async (entries: IngestEntry[]) => {
+    const total = entries.reduce((s, e) => s + e.size, 0);
+    const phase = entries.some((e) => e.retryable) ? 'Downloading' : 'Copying into offline storage';
+    let done = 0;
+    const report = (detail: string) =>
       progress({
         phase,
-        fraction: total > 0 ? done / total : null,
-        detail: entry.path,
+        fraction: total > 0 ? Math.min(1, done / total) : null,
+        detail,
+        bytes: { done: Math.min(done, total), total },
       });
+    for (const entry of entries) {
+      if (opts.signal?.aborted) throw new Error('Import cancelled.');
+      report(entry.path);
       bytesWritten += await copyWithRetry(
         siteId,
         entry,
         (n) => {
           done += n;
-          progress({
-            phase,
-            fraction: total > 0 ? Math.min(1, done / total) : null,
-            detail: entry.path,
-          });
+          report(entry.path);
         },
         opts.signal,
       );
     }
+  };
+  try {
+    await copyAll(toCopy);
   } catch (err) {
     // A half-copied new site would be invisible yet still use disk space.
     if (isNew) await deleteSite(siteId).catch(() => undefined);
@@ -450,14 +473,17 @@ export async function ingestEntries(
   }
 
   let manifest = manifestFromDetection({ ...detection, siteId });
-  manifest.totalBytes = bytesWritten;
   if (opts.origin) manifest.origin = opts.origin;
+  // Counted as if stored: the split swaps each for its parts.
+  manifest.totalBytes = bytesWritten + [...direct.keys()].reduce((n, path) => n + (byPath.get(path)?.size ?? 0), 0);
 
-  // A time series too large to load in the browser is stored in parts.
-  const { needsSplit, splitLargeTimeseries } = await import('@/engine/splitTimeseries');
   if (needsSplit(manifest)) {
     try {
-      manifest = await splitLargeTimeseries(manifest, { signal: opts.signal, onProgress: (p) => progress(p) });
+      manifest = await splitLargeTimeseries(manifest, {
+        signal: opts.signal,
+        onProgress: (p) => progress(p),
+        sources: direct,
+      });
       bytesWritten = manifest.totalBytes;
     } catch (err) {
       if (opts.signal?.aborted) {
@@ -465,6 +491,13 @@ export async function ingestEntries(
         throw new Error('Import cancelled.');
       }
       // Still usable as one file, only slower; the next open tries again.
+      try {
+        await copyAll(files.filter((f) => direct.has(f.path)));
+      } catch (copyErr) {
+        if (isNew) await deleteSite(siteId).catch(() => undefined);
+        throw copyErr;
+      }
+      manifest.totalBytes = bytesWritten;
       manifest.warnings.push(
         `${err instanceof Error ? err.message : String(err)}. Charts still work, but each year takes much longer to prepare the first time.`,
       );
@@ -472,6 +505,8 @@ export async function ingestEntries(
   }
   await saveManifest(manifest);
   await saveSiteMeta(siteId, meta);
+  // A re-import leaves the earlier split's parts behind: gigabytes for a large site.
+  if (!isNew) await removeStaleParts(manifest).catch(() => undefined);
 
   progress({ phase: 'Ready', fraction: 1 }, true);
   return { manifest, meta, bytesWritten };
