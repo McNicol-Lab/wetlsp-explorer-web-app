@@ -250,7 +250,7 @@ method, the data, and the imagery provider, and acknowledge the ecoϕlab.
 
 **This app**
 
-- Sagole, B., & Kumar, P. (2026). *WetLSP Explorer* (Version 1.3.3)
+- Sagole, B., & Kumar, P. (2026). *WetLSP Explorer* (Version 1.3.4)
   [Computer software]. <https://github.com/McNicol-Lab/wetlsp-explorer-web-app>
 
 ## Acknowledgments
