@@ -6,6 +6,8 @@ export async function runSmoke(window) {
   const assets = await readdir(join(app.getAppPath(), 'dist/assets'));
   const netcdfWorker = assets.find(name => name.startsWith('netcdf.worker-') && name.endsWith('.js'));
   if (!netcdfWorker) throw new Error('NetCDF worker missing');
+  const phenoclassWorker = assets.find(name => name.startsWith('phenoclass.worker-') && name.endsWith('.js'));
+  if (!phenoclassWorker) throw new Error('Phenology classifier worker missing');
   const result = await window.webContents.executeJavaScript(`(async () => {
     const deadline = Date.now() + 20000;
     while (!document.querySelector('button')) {
@@ -52,7 +54,19 @@ export async function runSmoke(window) {
       h5worker.postMessage({id: 1, method: 'info', args: ['smoke', 'invalid.nc', 2021]});
     });
     h5worker.terminate();
-    return { netcdfRuntime: true, rendered: true, sandboxed: true, catalog: true, duckdb: true, opfsPrevious: previous };
+    const classWorker = new Worker('/assets/' + ${JSON.stringify(phenoclassWorker)}, {type: 'module'});
+    await new Promise((resolve, reject) => {
+      classWorker.onerror = e => reject(new Error(e.message));
+      classWorker.onmessage = ({data}) => {
+        if ('progress' in data) return;
+        const year = data.result?.years?.[0];
+        if (data.ok && year?.ok === false && year.problems.some(p => p.includes('Not a NetCDF-4 (HDF5) file'))) resolve();
+        else reject(new Error('Unexpected classifier inspection: ' + JSON.stringify(data)));
+      };
+      classWorker.postMessage({id: 1, method: 'inspect', args: ['smoke', [{year: 2021, path: 'invalid.nc', size: 8, importedAt: 0}]]});
+    });
+    classWorker.terminate();
+    return { netcdfRuntime: true, phenoclassRuntime: true, rendered: true, sandboxed: true, catalog: true, duckdb: true, opfsPrevious: previous };
   })()`);
   if (process.env.WETLSP_SMOKE_EXPECT_PERSISTED === '1' && result.opfsPrevious !== 'persistent') {
     throw new Error('OPFS did not persist across process relaunch');

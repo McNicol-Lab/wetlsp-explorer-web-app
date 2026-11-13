@@ -1,9 +1,10 @@
 /**
- * Single app store. Everything the chrome and the five views read lives here;
+ * Single app store. Everything the chrome and the views read lives here;
  * heavy data (geometry, rasters, query results) is cached per site alongside it
  * so switching sites is instant after the first load.
  */
 import { create } from 'zustand';
+import { deleteSiteRuns } from '@/lib/phenoclass/storage';
 import type {
   CatalogSite,
   PixelGeometry,
@@ -18,7 +19,6 @@ import {
   loadAllManifests,
   loadSetting,
   loadSiteMeta,
-  saveManifest,
   saveSetting,
   saveSiteMeta,
 } from '@/lib/idb';
@@ -44,6 +44,7 @@ import {
 import { unregisterSite } from '@/engine/duckdb';
 import { prefetchSite } from '@/engine/yearCache';
 import { needsSplit, removeStaleParts, splitLargeTimeseries, SPLIT_PHASE } from '@/engine/splitTimeseries';
+import { commitTimeseriesSplit } from '@/engine/commitTimeseriesSplit';
 import { releaseSite } from '@/engine/netcdf';
 import { DEFAULT_PIXEL_SAMPLE, DEFAULT_SELECTION_CAP, MAX_PIXEL_SAMPLE } from '@/engine/sql';
 import { newSeed, randomSample } from '@/lib/sampling';
@@ -698,6 +699,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       await forgetSite(state.manifest);
       await deleteSiteFiles(siteId);
       await deleteManifest(siteId);
+      // Phenology-class analyses are derived from these files: they go too.
+      await deleteSiteRuns(siteId);
     } catch (err) {
       get().toast({
         kind: 'error',
@@ -982,7 +985,7 @@ async function splitStoredSite(manifest: SiteManifest): Promise<SiteManifest | n
       onProgress: (p) => get().ingest.controller === controller && set((s) => ({ ingest: { ...s.ingest, progress: p } })),
     });
     next.warnings = next.warnings.filter((w) => !w.includes('could not be split'));
-    await saveManifest(next);
+    await commitTimeseriesSplit(manifest, next);
     await clearQueryCaches(manifest.siteId);
     return next;
   } catch (err) {

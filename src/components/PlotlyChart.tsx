@@ -16,6 +16,8 @@ export interface ExportOptions {
   height?: number;
   scale?: number;
   background?: string;
+  /** Keep a multi-row legend clear of the exported title and subtitle. */
+  legendPosition?: 'bottom';
 }
 
 export interface PlotlyHandle {
@@ -81,6 +83,7 @@ export const PlotlyChart = forwardRef<
             font: { size: 17 },
           }
         : undefined;
+      const bottomLegend = opts.legendPosition === 'bottom';
       const layout: PlotLayout = {
         ...el.layout,
         width,
@@ -89,9 +92,9 @@ export const PlotlyChart = forwardRef<
         paper_bgcolor: opts.background ?? '#ffffff',
         plot_bgcolor: opts.background ?? '#ffffff',
         ...(title
-          ? { title, margin: { ...margin, t: margin.t + (opts.subtitle ? 74 : 52) } }
+          ? { title, margin: { ...margin, t: margin.t + (opts.subtitle ? 74 : 52), ...(bottomLegend ? { b: Math.max(onScreen.b ?? 0, 110) } : {}) } }
           : { margin }),
-        legend: { ...((el.layout.legend as object) ?? {}), y: 1.02, yanchor: 'bottom' },
+        legend: { ...((el.layout.legend as object) ?? {}), ...(bottomLegend ? { y: -0.06, yanchor: 'top' } : { y: 1.02, yanchor: 'bottom' }) },
       };
       return plotly.toImage(
         { data: el.data, layout },

@@ -1,6 +1,6 @@
 /** Shared data model for ingested WetLSP site datasets. */
 
-export type ViewId = 'overview' | 'timeseries' | 'pixelmap' | 'phenometrics' | 'catalog';
+export type ViewId = 'overview' | 'timeseries' | 'pixelmap' | 'phenometrics' | 'catalog' | 'phenoclasses';
 
 export type TableRole = 'geom' | 'meta' | 'timeseries';
 
