@@ -18,6 +18,7 @@ import { TimeSeriesInspector, TimeSeriesView } from '@/views/TimeSeriesView';
 import { PixelMapInspector, PixelMapView } from '@/views/PixelMapView';
 import { PhenometricsInspector, PhenometricsView } from '@/views/PhenometricsView';
 import { CatalogInspector, CatalogView } from '@/views/CatalogView';
+import { PhenologyClassesInspector, PhenologyClassesView } from '@/views/phenoclass/PhenologyClassesView';
 
 const CANVASES = {
   overview: OverviewView,
@@ -25,6 +26,7 @@ const CANVASES = {
   pixelmap: PixelMapView,
   phenometrics: PhenometricsView,
   catalog: CatalogView,
+  phenoclasses: PhenologyClassesView,
 } as const;
 
 const INSPECTORS = {
@@ -33,6 +35,7 @@ const INSPECTORS = {
   pixelmap: PixelMapInspector,
   phenometrics: PhenometricsInspector,
   catalog: CatalogInspector,
+  phenoclasses: PhenologyClassesInspector,
 } as const;
 
 export default function App() {
@@ -59,7 +62,7 @@ export default function App() {
     };
   }, [boot]);
 
-  // Keyboard: ⌘K for the palette, ⌘1–5 for views, Esc closes overlays.
+  // Keyboard: ⌘K for the palette, ⌘1–6 for views, Esc closes overlays.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
@@ -78,7 +81,7 @@ export default function App() {
         void runFigureAction('copy');
         return;
       }
-      if (meta && /^[1-5]$/.test(e.key)) {
+      if (meta && /^[1-6]$/.test(e.key)) {
         e.preventDefault();
         setView(VIEWS[Number(e.key) - 1].id);
         return;

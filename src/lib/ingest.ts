@@ -15,10 +15,11 @@ import {
   stripCommonRoot,
   type InputFile,
 } from './detect';
-import { loadManifest, saveManifest, saveSiteMeta } from './idb';
+import { loadManifest, saveSiteMeta } from './idb';
 import { deleteSite, requestPersistence, writeSiteFile } from './opfs';
 import { isZipPath, listZip, openZipMember } from './zip';
 import { SPLIT_ABOVE_BYTES } from './splitPlan';
+import { commitTimeseriesSplit } from '@/engine/commitTimeseriesSplit';
 import type { ProgressEvent, SiteManifest, SiteMeta } from './types';
 
 export interface IngestEntry {
@@ -476,6 +477,7 @@ export async function ingestEntries(
   if (opts.origin) manifest.origin = opts.origin;
   // Counted as if stored: the split swaps each for its parts.
   manifest.totalBytes = bytesWritten + [...direct.keys()].reduce((n, path) => n + (byPath.get(path)?.size ?? 0), 0);
+  const beforeSplit = manifest;
 
   if (needsSplit(manifest)) {
     try {
@@ -503,7 +505,7 @@ export async function ingestEntries(
       );
     }
   }
-  await saveManifest(manifest);
+  await commitTimeseriesSplit(beforeSplit, manifest);
   await saveSiteMeta(siteId, meta);
   // A re-import leaves the earlier split's parts behind: gigabytes for a large site.
   if (!isNew) await removeStaleParts(manifest).catch(() => undefined);

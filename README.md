@@ -10,7 +10,7 @@ A desktop app for Mac and Windows. Your data stays on your computer.
 | Install the app | [Download](#download) below |
 | Follow step-by-step instructions | **[SETUP.md](SETUP.md)** |
 | Fix a problem | [Troubleshooting](SETUP.md#if-something-goes-wrong) |
-| See what the app does | [The five views](#the-five-views) · [Video walkthrough](#video-walkthrough) |
+| See what the app does | [The six views](#the-six-views) · [Video walkthrough](#video-walkthrough) |
 | Cite the app or its data | [References and how to cite](#references-and-how-to-cite) · [Data sources](#data-sources-and-attribution) |
 
 ## Download
@@ -71,7 +71,7 @@ your own data:
 You can also drag folders or `.zip` files onto the window, or pick individual
 files. Both single-file and batched `_ds` datasets work.
 
-## The five views
+## The six views
 
 | View | Use it to |
 | --- | --- |
@@ -80,6 +80,54 @@ files. Both single-file and batched `_ds` datasets work.
 | **Pixel Map** | Select pixels, draw regions or import them from a shapefile, lay a GeoTIFF or NetCDF underneath, then inspect the time series. |
 | **Phenometrics** | Examine timing, greenness, and quality layers; compare up to four site-years. |
 | **Catalog** | Search the bundled 95-site catalog and export site information. |
+| **Phenology Classes** | Group a site's pixels into classes with similar seasonal cycles; map them per year and as a multi-year consensus, measure class cover, draw synthetic class waveforms, and export georeferenced GeoTIFFs. |
+
+## Phenology classes
+
+The **Phenology Classes** view (⌘6) clusters one site's annual phenometrics
+with k-means, following Vishal Bobde's method in the lab's
+[companion notebook](https://github.com/McNicol-Lab/wetlsp_companion/blob/468960957b41ed44cce1b7bb38cdff4c4c06f765/Vishal_code.ipynb).
+Classes are **unsupervised phenological clusters, not vegetation types**, and
+class numbers mean nothing outside the model that made them.
+
+1. **Build model.** Pick the years (normally 2021–2024) and the number of
+   classes (k = 2–9, default 7). The selected files are checked at full
+   resolution: eligible pixel-years and the reason every other cell was
+   excluded. Optional diagnostics plot inertia and silhouette for k = 2–9.
+   Training runs in a background worker with progress and Cancel; every run is
+   saved as a new analysis.
+2. **Annual maps & consensus.** One model classifies every year, so colours
+   and class numbers agree across years. The consensus needs at least three
+   valid years, never lets a missing year vote, and marks ties as ambiguous.
+3. **Class cover.** Cell counts, % of classified cells, % of the site
+   footprint and planar area, computed on the full-resolution labels.
+4. **Waveforms.** Synthetic seasonal curves rebuilt from class-median
+   phenometrics. They are reconstructions, not observed EVI.
+
+**Method.** 21 features per pixel-year (cycle-1 QA ≤ 3; dates as days since the
+pixel's own onset, modulo 365, also in leap years; a second cycle only when
+NumCycles ≥ 2 and QA_2 ≤ 3, otherwise zero-filled), standardised with a scaler
+fitted on every eligible pixel-year, then k-means (k-means++, 20 restarts,
+seed 42). On large sites the k-means fit uses a seeded random sample
+(200,000 pixel-years by default, recorded with the model); every pixel is still
+classified. Missing values are never imputed and never become a class.
+
+**Differences from the notebook, by design:** one model per site (the notebook
+pooled six sites); the consensus rules above (the notebook's mode counted
+no-data as a vote and broke ties by the smaller class number); QA must be an
+integer 1–4 and values outside a variable's valid range count as missing.
+
+**Exports.** GeoTIFFs of each year and of the consensus class, valid-year count
+and agreement (UInt8 with an embedded colour table, 0 = no data; agreement is
+Float32 with NaN), PNG figures, a class-cover JSON object with annual and
+consensus counts and percentages, cover and class-median CSVs, waveform CSVs,
+`model.json` (re-applicable to the same site) and a ZIP bundle with a README.
+
+**Validation** (development only): `scripts/phenoclass_reference.py` runs the
+notebook's own functions and scikit-learn to produce test fixtures;
+`src/lib/phenoclass/realdata.test.ts` compares the app's pipeline with them on
+real data; `scripts/phenoclass_validate_geotiff.py` checks exported GeoTIFFs
+with GDAL against the source NetCDF. Neither Python script is needed to use the app.
 
 ## Your data
 
@@ -106,7 +154,8 @@ precision every chart and export already used. The parts take under a third
 of the space (BR-Npw: 3.7 GB) and are written several at a time, on up to four
 processor cores, straight from the file you dropped, so the import needs room
 for the parts only: BR-Npw takes about 2 minutes on a recent Mac. Your
-original files are not changed. Sites imported with an earlier version are
+original files are not changed. A stored original is removed only after all
+parts are verified and the replacement file list is saved. Sites imported with an earlier version are
 split once, the first time they are opened. The first chart of each year still takes a while on a
 large site (about 30 s on AU-Arc); after that the year opens at once, also
 offline. One year of a site with about 1.5 million pixels needs about 2 GB of
@@ -199,6 +248,11 @@ WetLSP Explorer is a viewer. It does not include or process satellite imagery.
   naming and refer to eddy-covariance flux tower sites. The catalog's
   `base_network` column lists AmeriFlux and European flux network
   affiliations. The app contains no flux-tower measurements.
+- **Phenology classification method.** Adapted from Vishal Bobde's
+  phenometric cover-type classification notebook in the McNicol Lab
+  [wetlsp_companion](https://github.com/McNicol-Lab/wetlsp_companion)
+  repository (commit `4689609`). The method is re-implemented in TypeScript;
+  no notebook code is included.
 - **Basemaps.** Map backgrounds are loaded at runtime from OpenFreeMap
   (OpenStreetMap data) and Esri World Imagery, with attribution shown on the
   map. They are not PlanetScope imagery.
@@ -250,7 +304,7 @@ method, the data, and the imagery provider, and acknowledge the ecoϕlab.
 
 **This app**
 
-- Sagole, B., & Kumar, P. (2026). *WetLSP Explorer* (Version 1.3.4)
+- Sagole, B., & Kumar, P. (2026). *WetLSP Explorer* (Version 1.4.0)
   [Computer software]. <https://github.com/McNicol-Lab/wetlsp-explorer-web-app>
 
 ## Acknowledgments

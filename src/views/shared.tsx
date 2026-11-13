@@ -1,4 +1,4 @@
-/** Hooks and small pieces the five views share. */
+/** Hooks and small pieces the views share. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { defaultBasemap, type BasemapId } from '@/lib/basemaps';

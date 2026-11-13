@@ -71,8 +71,8 @@ let splitId = 0;
 
 /**
  * The manifest with every oversized time series part replaced by its parts.
- * The caller saves it. On failure nothing is changed: parts already written
- * are removed and the original stays.
+ * The caller publishes it with commitTimeseriesSplit. Originals stay until
+ * that succeeds. On failure, new parts are removed and the original stays.
  */
 export async function splitLargeTimeseries(manifest: SiteManifest, opts: SplitOptions = {}): Promise<SiteManifest> {
   const ts = manifest.timeseries;
@@ -82,29 +82,33 @@ export async function splitLargeTimeseries(manifest: SiteManifest, opts: SplitOp
   let doneBytes = 0;
 
   const replaced = new Map<string, StoredFile[]>();
-  for (const part of big) {
-    const source = opts.sources?.get(part.path) ?? (await readSiteFile(manifest.siteId, part.path));
-    const parts = await splitOne(manifest.siteId, part, source, {
-      signal: opts.signal,
-      onProgress: (fraction, note) => {
-        const done = doneBytes + fraction * part.size;
-        opts.onProgress?.({
-          phase: SPLIT_PHASE,
-          fraction: done / bigBytes,
-          detail: part.path,
-          bytes: { done, total: bigBytes },
-          note,
-        });
-      },
-    });
-    replaced.set(part.path, parts);
-    doneBytes += part.size;
+  try {
+    for (const part of big) {
+      const source = opts.sources?.get(part.path) ?? (await readSiteFile(manifest.siteId, part.path));
+      const parts = await splitOne(manifest.siteId, part, source, {
+        signal: opts.signal,
+        onProgress: (fraction, note) => {
+          const done = doneBytes + fraction * part.size;
+          opts.onProgress?.({
+            phase: SPLIT_PHASE,
+            fraction: done / bigBytes,
+            detail: part.path,
+            bytes: { done, total: bigBytes },
+            note,
+          });
+        },
+      });
+      replaced.set(part.path, parts);
+      doneBytes += part.size;
+    }
+  } catch (err) {
+    // splitOne cleans its own failed writes; also remove successful earlier
+    // parts when a later source fails or the user cancels a multi-part import.
+    for (const parts of replaced.values()) {
+      for (const part of parts) await deleteWhenFree(manifest.siteId, part.path);
+    }
+    throw err;
   }
-
-  // Only now is anything removed: every split part is complete and checked.
-  // A part split from a dropped file was never stored; one of an earlier
-  // import may be, and is stale now.
-  for (const path of replaced.keys()) await deleteSiteFile(manifest.siteId, path);
   const parts = ts.parts.flatMap((p) => replaced.get(p.path) ?? [p]);
   const totalBytes = parts.reduce((n, p) => n + p.size, 0);
   return {

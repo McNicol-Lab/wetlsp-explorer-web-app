@@ -1,3 +1,40 @@
+**New in v1.4.0: Phenology Classes, with annual maps, class cover and seasonal waveforms.**
+
+- Open **Phenology Classes** (⌘6 / Ctrl+6) to build and save a classifier for
+  one site, following Vishal Bobde's phenometric method. Choose the years and
+  2–9 classes; the default is 7. A background worker shows progress and can
+  be cancelled. Large sites use a reproducible training sample; every usable
+  pixel in every selected year is still classified.
+- **Annual maps & consensus** apply the same model to every selected year.
+  The four-year consensus requires at least three valid years. Missing
+  years do not vote, and ties remain marked as ambiguous.
+- **Class cover** reports pixel counts, percentage of classified pixels,
+  percentage of the site footprint, and area where the map projection allows
+  it, per year and for the consensus. Excluded and missing data stay visible.
+- **Waveforms** reconstruct each class's characteristic seasonal curve from
+  its median phenometrics. These are synthetic curves, not observed EVI;
+  classes describe seasonal shapes, not vegetation types.
+- Export PNG figures, georeferenced annual and consensus GeoTIFFs, cover and
+  waveform CSVs, a class-cover JSON object, or a ZIP bundle. Saved models can
+  be exported and applied again to the same site. PNG cover legends stay
+  clear of the title and subtitle.
+- **Safer large-site imports.** A stored original is removed only after all
+  split parts are verified and the replacement file list is saved. Failed
+  or cancelled multi-file splits remove their new parts. Splitting remains
+  inside Explorer; original dataset folders and the data package layout
+  are unchanged.
+
+Checked with the reprocessed **AU-Arc (2.83 GB)** and **BR-Npw (12.75 GB)**
+time series: imports, maps, random pixel draws, charts, classification,
+consensus and exports. All 300,237,118 AU-Arc rows and 1,652,363,303 BR-Npw rows
+were preserved. For both sites, two independent 250-pixel draws reproduced
+the source's daily means, quartiles and counts at the app's float32 precision.
+AU-Arc's feature extraction and fixed-model labels also matched the reference
+notebook and scikit-learn on all 3,676,343 eligible pixel-years. Separately
+trained sampled models can differ from an all-data fit.
+
+Imported sites and saved data survive installation over the previous version.
+
 **Faster in v1.3.4: large sites import about three times faster, with a clearer progress bar.**
 
 - The one-time split of a large time series (any `pixels_timeseries` over

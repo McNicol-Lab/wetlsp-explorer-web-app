@@ -10,6 +10,7 @@ import {
   PanelRightOpen,
   Layers,
   Search,
+  Shapes,
   Sun,
   Table2,
   WifiOff,
@@ -27,6 +28,7 @@ export const VIEWS: Array<{ id: ViewId; label: string; icon: typeof Globe2 }> = 
   { id: 'pixelmap', label: 'Pixel Map', icon: MapIcon },
   { id: 'phenometrics', label: 'Phenometrics', icon: Layers },
   { id: 'catalog', label: 'Catalog', icon: Table2 },
+  { id: 'phenoclasses', label: 'Phenology Classes', icon: Shapes },
 ];
 
 export function TopBar() {
