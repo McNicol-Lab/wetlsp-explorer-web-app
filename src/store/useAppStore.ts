@@ -175,6 +175,8 @@ interface AppState {
   view: ViewId;
   railCollapsed: boolean;
   inspectorCollapsed: boolean;
+  /** Per-view inspector choice. Views whose inspector only describes start closed. */
+  inspectorClosedByView: Partial<Record<ViewId, boolean>>;
   paletteOpen: boolean;
   onboardingDone: boolean;
   /** Lets the catalog be browsed before anything is uploaded. */
@@ -231,6 +233,8 @@ interface AppState {
   setView(v: ViewId): void;
   toggleRail(): void;
   toggleInspector(): void;
+  /** Open the inspector for the current view (a selection was made). */
+  openInspector(): void;
   setPaletteOpen(open: boolean): void;
   dismissOnboarding(): void;
   setHeroDismissed(v: boolean): void;
@@ -310,7 +314,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   theme: 'light',
   view: 'overview',
   railCollapsed: false,
-  inspectorCollapsed: false,
+  inspectorCollapsed: true,
+  inspectorClosedByView: { overview: true, catalog: true },
   paletteOpen: false,
   onboardingDone: false,
   heroDismissed: false,
@@ -401,7 +406,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setView(v) {
-    set({ view: v });
+    const closed = get().inspectorClosedByView[v] ?? false;
+    set({ view: v, inspectorCollapsed: closed });
   },
 
   toggleRail() {
@@ -411,7 +417,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   toggleInspector() {
-    set({ inspectorCollapsed: !get().inspectorCollapsed });
+    const { view, inspectorCollapsed, inspectorClosedByView } = get();
+    const next = !inspectorCollapsed;
+    set({ inspectorCollapsed: next, inspectorClosedByView: { ...inspectorClosedByView, [view]: next } });
+  },
+
+  openInspector() {
+    const { view, inspectorClosedByView } = get();
+    set({ inspectorCollapsed: false, inspectorClosedByView: { ...inspectorClosedByView, [view]: false } });
   },
 
   setPaletteOpen(open) {

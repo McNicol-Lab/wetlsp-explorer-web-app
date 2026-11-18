@@ -181,6 +181,7 @@ export function plotTheme(dark: boolean): PlotLayout {
       tickfont: { color: muted, size: 11 },
       title: { font: { color: muted, size: 11.5 } },
     },
+    modebar: { bgcolor: 'rgba(0,0,0,0)', color: muted },
     legend: {
       orientation: 'h',
       y: 1.08,

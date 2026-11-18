@@ -31,16 +31,18 @@
  * data is the only thing allowed to be colourful.
  */
 :root {
-  --bg: #f6f7f4;
+  --bg: #fafaf9;
   --bg-elevated: #ffffff;
-  --bg-sunken: #f0f2ee;
-  --bg-hover: #edf2ef;
-  --bg-sidebar: #f1f4ef;
-  --border: #dfe5df;
-  --border-strong: #c5cec6;
-  --text: #23332d;
-  --text-muted: #617069;
-  --text-faint: #78857e;
+  --bg-sunken: #f3f4f2;
+  --bg-hover: #eef0ed;
+  --bg-active: #e7ebe8;
+  --bg-sidebar: #f5f6f4;
+  --border: #e5e9e6;
+  --border-strong: #cdd4cf;
+  --text: #202624;
+  --text-muted: #5f6a66;
+  --text-faint: #6c7672;
+  --shadow-sheet: -8px 0 24px -12px rgb(25 45 34 / 0.18);
   --accent: #0f766e;
   --accent-contrast: #ffffff;
   --shadow-card: 0 1px 2px rgb(25 45 34 / 0.025);
@@ -54,7 +56,9 @@
   --bg-elevated: #121821;
   --bg-sunken: #0e131a;
   --bg-hover: #1a222d;
+  --bg-active: #1f2935;
   --bg-sidebar: #10171b;
+  --shadow-sheet: -8px 0 24px -12px rgb(0 0 0 / 0.6);
   --border: #212a36;
   --border-strong: #313d4d;
   --text: #e8ecf2;
@@ -78,7 +82,8 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: 13px;
+    font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
   }
@@ -116,7 +121,13 @@
     background: var(--bg-elevated);
     border: 1px solid var(--border);
     border-radius: 8px;
-    box-shadow: var(--shadow-card);
+    box-shadow: none;
+  }
+  /* Numbers line up in tables, stats and axes. */
+  .tabular,
+  table,
+  dd {
+    font-variant-numeric: tabular-nums;
   }
   .chip {
     display: inline-flex;

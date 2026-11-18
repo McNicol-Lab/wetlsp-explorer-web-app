@@ -181,7 +181,7 @@ export function CatalogView() {
                   }`}
                 >
                   <span className="flex items-center gap-1.5 truncate font-medium">
-                    {imported && <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />}
+                    {imported && <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" title="Imported on this device" aria-label="Imported" />}
                     {row.site_id}
                   </span>
                   <span className="truncate text-[var(--text-muted)]">{row.site_name ?? '—'}</span>
@@ -277,31 +277,22 @@ export function CatalogInspector() {
               : 'None loaded'
         }
         actions={
-          <Button size="sm" icon={<Upload size={13} />} onClick={loadFile}>
+          <Button
+            size="sm"
+            icon={<Upload size={13} />}
+            onClick={loadFile}
+            title="Load a catalog CSV or JSON. Needs a site_id column; lat/lon place sites on the map and wetlsp_<year> columns fill availability."
+          >
             Load
           </Button>
         }
       >
-        <dl className="space-y-1.5 text-[12.5px]">
+        <dl className="space-y-1.5 text-[12px]">
           <Row label="Sites" value={String(catalog.length)} />
           <Row label="With coordinates" value={`${mappable}`} />
           <Row label="With availability flags" value={`${withYears}`} />
           <Row label="Imported here" value={`${siteOrder.length}`} />
         </dl>
-        <p className="mt-2.5 text-[11.5px] leading-snug text-[var(--text-muted)]">
-          A catalog file needs a <code className="font-mono">site_id</code> column;{' '}
-          <code className="font-mono">lat</code>/<code className="font-mono">lon</code> put sites on
-          the Overview map and <code className="font-mono">wetlsp_&lt;year&gt;</code> columns fill the
-          availability chips.
-        </p>
-      </Card>
-
-      <Card title="Reading the table">
-        <ul className="space-y-1.5 text-[12px] leading-snug text-[var(--text-muted)]">
-          <li>A dot beside the site id means that dataset is imported here.</li>
-          <li>Click any row to open it on the Overview map.</li>
-          <li>Column headers sort; click again to reverse.</li>
-        </ul>
       </Card>
     </div>
   );

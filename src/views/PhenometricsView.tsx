@@ -433,6 +433,14 @@ function Panel({
 
       {!panel.slice || !scale ? (
         <ErrorPanel message={panel.error ?? `"${layer}" is not in this file.`} />
+      ) : panel.slice.finiteCount === 0 ? (
+        // A year file can exist with every cell at its fill value: say so rather than draw empty axes.
+        <div className="grid h-full place-items-center p-6 text-center">
+          <div>
+            <p className="text-[13px] font-medium">No valid estimates for {layer} in {panel.year}.</p>
+            <p className="mt-1 text-[12px] text-[var(--text-muted)]">Every cell in this layer is a fill value.</p>
+          </div>
+        </div>
       ) : mode === 'relief' ? (
         <Raster3D
           ref={reliefRef}

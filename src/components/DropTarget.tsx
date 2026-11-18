@@ -83,6 +83,19 @@ export function DropOverlay({ visible }: { visible: boolean }) {
   );
 }
 
+/**
+ * Click a file input that is attached (hidden) to the document. Some engines
+ * and automation tools only honour pickers whose input is in the DOM.
+ */
+function clickAttached(input: HTMLInputElement) {
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  const cleanup = () => window.setTimeout(() => input.remove(), 0);
+  input.addEventListener('change', cleanup, { once: true });
+  input.addEventListener('cancel', cleanup, { once: true });
+  input.click();
+}
+
 /** Folder / file pickers, shared by the hero and the left rail. */
 export function useImportActions() {
   const importEntries = useAppStore((s) => s.importEntries);
@@ -107,7 +120,7 @@ export function useImportActions() {
         const entries = entriesFromFileList(input.files);
         await importEntries(entries, entries[0]?.path.split('/')[0]);
       };
-      input.click();
+      clickAttached(input);
     } catch (err) {
       toast({
         kind: 'error',
@@ -126,7 +139,7 @@ export function useImportActions() {
       if (!input.files?.length) return;
       await importEntries(entriesFromFileList(input.files));
     };
-    input.click();
+    clickAttached(input);
   }, [importEntries]);
 
   return { openFolder, openFiles };
