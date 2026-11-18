@@ -35,7 +35,7 @@ import {
 } from '@/engine/queries';
 import { DEFAULT_PIXEL_SAMPLE, MAX_PIXEL_SAMPLE } from '@/engine/sql';
 import { downloadBlob, downloadCsv, exportBackground, timestampedName } from '@/lib/export';
-import { copyImage } from '@/lib/figure';
+import { copyImage, elementToBlob } from '@/lib/figure';
 import { formatCount, isoFromMs } from '@/lib/format';
 import { newSeed } from '@/lib/sampling';
 import type { DailySummaryRow } from '@/lib/types';
@@ -244,6 +244,7 @@ export function TimeSeriesView() {
   }, [comparing, regionsState.data]);
 
   const kd = useKeyDates(lineState.data?.summary, ts.series);
+  const domRef = useRef<HTMLDivElement>(null);
   // The plotted date extent, so the ribbon shares the chart's x axis.
   const ribbonDomain = useMemo<[string, string] | null>(() => {
     const rows = lineState.data?.summary;
@@ -460,7 +461,8 @@ export function TimeSeriesView() {
           chart={chart}
           regionsData={comparing ? regionsState.data : null}
           lineData={lineState.data}
-          ready={Boolean(state.data) && chart !== 'multiples' && chart !== 'calendar'}
+          ready={Boolean(state.data)}
+          domRef={domRef}
           chartRef={chartRef}
           describe={describe}
         />
@@ -484,7 +486,7 @@ export function TimeSeriesView() {
             body={comparing ? 'Turn on regions in the Pixel Map inspector.' : 'Choose a year and a series in the inspector.'}
           />
         ) : chart === 'multiples' && yearsState.data ? (
-          <div className="panel-reveal absolute inset-0">
+          <div ref={domRef} className="panel-reveal absolute inset-0 bg-[var(--bg-elevated)]">
             <YearMultiples
               summary={yearsState.data.summary}
               years={yearsState.data.years}
@@ -495,7 +497,7 @@ export function TimeSeriesView() {
             />
           </div>
         ) : chart === 'calendar' && lineState.data && ts.year !== null ? (
-          <div className="panel-reveal absolute inset-0">
+          <div ref={domRef} className="panel-reveal absolute inset-0 bg-[var(--bg-elevated)]">
             <CalendarHeatmap
               summary={lineState.data.summary}
               year={ts.year}
@@ -851,6 +853,7 @@ function ExportButtons({
   lineData,
   ready,
   chartRef,
+  domRef,
   describe,
 }: {
   chart: TimeseriesChart;
@@ -858,6 +861,8 @@ function ExportButtons({
   lineData: Loaded | null;
   ready: boolean;
   chartRef: React.RefObject<PlotlyHandle | null>;
+  /** The figure element for views drawn in SVG/HTML rather than Plotly. */
+  domRef: React.RefObject<HTMLDivElement | null>;
   describe: () => { title: string; subtitle: string; caption: string } | null;
 }) {
   const site = useActiveSite();
@@ -877,6 +882,10 @@ function ExportButtons({
 
   const render = useCallback(
     async (opts: ExportOptions = {}) => {
+      if (chart === 'multiples' || chart === 'calendar') {
+        if (!domRef.current) throw new Error('The figure is not ready to export yet.');
+        return elementToBlob(domRef.current, exportBackground());
+      }
       const handle = chartRef.current;
       if (!handle) throw new Error('The chart is not ready to export yet.');
       const words = describe();
@@ -889,7 +898,7 @@ function ExportButtons({
         }),
       );
     },
-    [chartRef, describe],
+    [chartRef, describe, chart, domRef],
   );
 
   const exportRows = useCallback(() => {
@@ -916,7 +925,7 @@ function ExportButtons({
     );
   }, [d, site, ts.year]);
 
-  const flat = chart !== '3d';
+  const flat = (chart !== '3d') && chart !== 'multiples' && chart !== 'calendar';
   return (
     <FigureMenu
       disabled={!ready}
@@ -936,12 +945,12 @@ function ExportButtons({
               },
             ]
           : []),
-        {
+        ...(chart === 'multiples' || chart === 'calendar' ? [] : [{
           label: 'PNG for slides',
           hint: '1920×1080',
           icon: <Presentation size={13} />,
           run: async () => downloadBlob(await render({ width: 1920, height: 1080, scale: 1 }), baseName('png', 'slide')),
-        },
+        }]),
         ...(regionsData
           ? [
               {

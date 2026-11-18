@@ -16,6 +16,7 @@ import { BuildModelSection, Notice } from './BuildModelSection';
 import { MapsSection } from './MapsSection';
 import { CoverSection } from './CoverSection';
 import { WaveformsSection } from './WaveformsSection';
+import { TransitionsSection } from './TransitionsSection';
 import { JobPanel } from './JobPanel';
 import { Swatch, useRunArrays } from './shared';
 import {
@@ -34,6 +35,7 @@ const SECTIONS: Array<{ value: PhenoclassSection; label: string }> = [
   { value: 'build', label: 'Build model' },
   { value: 'maps', label: 'Annual maps & consensus' },
   { value: 'cover', label: 'Class cover' },
+  { value: 'transitions', label: 'Transitions' },
   { value: 'waveforms', label: 'Waveforms' },
 ];
 
@@ -134,6 +136,8 @@ export function PhenologyClassesView() {
           <MapsSection key={run!.runId} run={run!} stale={stale} />
         ) : section === 'cover' ? (
           <CoverSection key={run!.runId} run={run!} />
+        ) : section === 'transitions' ? (
+          <TransitionsSection key={run!.runId} run={run!} />
         ) : (
           <WaveformsSection key={run!.runId} run={run!} />
         )}

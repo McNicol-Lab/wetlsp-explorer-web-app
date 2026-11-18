@@ -4,7 +4,9 @@
  */
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Download, Search, Table2, Upload } from 'lucide-react';
-import { Button, Card, Chip, EmptyState, TextInput } from '@/components/ui';
+import { Button, Card, Chip, EmptyState, Segmented, TextInput } from '@/components/ui';
+import { AvailabilityStrip, yearAvailability, type YearAvailability } from '@/components/viz/AvailabilityStrip';
+import clsx from 'clsx';
 import { useAppStore } from '@/store/useAppStore';
 import { downloadCsv, timestampedName } from '@/lib/export';
 import { formatValue } from '@/lib/format';
@@ -41,6 +43,8 @@ export function CatalogView() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'site_id', dir: 1 });
   const [loadedOnly, setLoadedOnly] = useState(false);
+  const [layout, setLayout] = useState<'list' | 'cards'>('list');
+  const sites = useAppStore((s) => s.sites);
   const [scrollTop, setScrollTop] = useState(0);
   const viewportRef = useRef<HTMLDivElement>(null);
   const deferredQuery = useDeferredValue(query);
@@ -116,7 +120,18 @@ export function CatalogView() {
           />
           Imported only
         </label>
-        <Chip>{rows.length} of {catalog.length}</Chip>
+        <Chip tone={rows.length !== catalog.length ? 'accent' : undefined} title={rows.length !== catalog.length ? 'Filters active' : undefined}>
+          {rows.length} of {catalog.length}
+        </Chip>
+        <Segmented<'list' | 'cards'>
+          size="sm"
+          value={layout}
+          onChange={setLayout}
+          options={[
+            { value: 'list', label: 'List', title: 'Compact sortable table' },
+            { value: 'cards', label: 'Cards', title: 'Visual cards with location and availability' },
+          ]}
+        />
         <Button
           size="sm"
           icon={<Download size={13} />}
@@ -141,6 +156,27 @@ export function CatalogView() {
         </Button>
       </div>
 
+      {layout === 'cards' ? (
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(232px, 1fr))' }}>
+            {rows.map((row) => {
+              const loadedId = siteOrder.find((id) => norm(id) === norm(row.site_id));
+              const state = loadedId ? sites[loadedId] : null;
+              return (
+                <SiteCard
+                  key={row.site_id}
+                  row={row}
+                  focused={Boolean(focusId && norm(focusId) === norm(row.site_id))}
+                  availability={yearAvailability(state?.manifest ?? null, state?.facts?.years ?? [], row)}
+                  imported={Boolean(state)}
+                  onOpen={() => openSite(row)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+      <>
       <div
         className="grid shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--bg-sunken)] px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-faint)]"
         style={{ gridTemplateColumns: GRID, scrollbarGutter: 'stable' }}
@@ -209,6 +245,8 @@ export function CatalogView() {
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -304,5 +342,61 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="text-[var(--text-muted)]">{label}</dt>
       <dd className="font-medium tabular-nums">{value}</dd>
     </div>
+  );
+}
+
+/** A catalog site as a small card: where it is, what it holds, whether it is here. */
+function SiteCard({
+  row, focused, availability, imported, onOpen,
+}: {
+  row: CatalogSite;
+  focused: boolean;
+  availability: YearAvailability[];
+  imported: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={clsx(
+        'group flex flex-col gap-2.5 rounded-[12px] border bg-[var(--bg-elevated)] p-3 text-left transition-[border-color,box-shadow] duration-150 hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-pop)]',
+        focused ? 'border-[var(--accent)]' : 'border-[var(--border)]',
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-[12px] font-semibold">
+            {row.site_id}
+            <span className={clsx('rounded-[5px] px-1.5 py-px text-[10px] font-medium', imported ? 'bg-[var(--pale)] text-[var(--accent)]' : 'bg-[var(--bg-sunken)] text-[var(--text-faint)]')}>
+              {imported ? 'Imported' : 'Catalog'}
+            </span>
+          </div>
+          <div className="mt-0.5 truncate text-[13px]" title={row.site_name}>{row.site_name ?? '—'}</div>
+          <div className="truncate text-[11px] text-[var(--text-muted)]">{[row.country, row.base_network].filter(Boolean).join(' · ') || '—'}</div>
+        </div>
+        <WorldDot lat={row.lat} lon={row.lon} />
+      </div>
+      <AvailabilityStrip items={availability} compact />
+    </button>
+  );
+}
+
+/** Where on Earth: one dot on a plain equirectangular frame. */
+function WorldDot({ lat, lon }: { lat?: number; lon?: number }) {
+  const W = 64;
+  const H = 34;
+  const has = lat !== undefined && lon !== undefined && Number.isFinite(lat) && Number.isFinite(lon);
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="shrink-0 rounded-[6px] bg-[var(--bg-sunken)]" aria-label={has ? `${lat!.toFixed(2)}, ${lon!.toFixed(2)}` : 'No coordinates'}>
+      {[-60, -30, 0, 30, 60].map((g) => <line key={`p${g}`} x1={0} x2={W} y1={H / 2 - (g / 90) * (H / 2)} y2={H / 2 - (g / 90) * (H / 2)} stroke="var(--border)" strokeWidth={g === 0 ? 0.8 : 0.4} />)}
+      {[-120, -60, 0, 60, 120].map((g) => <line key={`m${g}`} y1={0} y2={H} x1={W / 2 + (g / 180) * (W / 2)} x2={W / 2 + (g / 180) * (W / 2)} stroke="var(--border)" strokeWidth={0.4} />)}
+      {has && (
+        <>
+          <circle cx={W / 2 + (lon! / 180) * (W / 2)} cy={H / 2 - (lat! / 90) * (H / 2)} r={4.5} fill="var(--accent)" opacity={0.18} />
+          <circle cx={W / 2 + (lon! / 180) * (W / 2)} cy={H / 2 - (lat! / 90) * (H / 2)} r={2.2} fill="var(--accent)" />
+        </>
+      )}
+    </svg>
   );
 }

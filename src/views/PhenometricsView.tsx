@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BitmapLayer } from '@deck.gl/layers';
 import { Layers, Maximize2, Plus, X } from 'lucide-react';
 import { FigureMenu } from '@/components/FigureMenu';
-import { canvasToBlob, copyImage } from '@/lib/figure';
+import { canvasToBlob, copyImage, elementToBlob } from '@/lib/figure';
 import { MapCanvas, type MapCanvasHandle } from '@/components/MapCanvas';
 import {
   IDENTITY_VIEW, RasterFigure, type FigureView, type Probe, type RasterFigureHandle,
@@ -44,6 +44,7 @@ export function PhenometricsView() {
   const dark = useDark();
   const basemap = useBasemap();
   const [mode, setMode] = useState<Mode>('season');
+  const seasonRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<FigureView>(IDENTITY_VIEW);
   const [probe, setProbe] = useState<(Probe & { panel: number }) | null>(null);
   const figureRefs = useRef<Array<RasterFigureHandle | null>>([]);
@@ -284,12 +285,22 @@ export function PhenometricsView() {
             </Button>
           )}
           <FigureMenu
-            disabled={renderedPanels === 0 || mode === 'season'}
-            actions={{
-              save: async () => downloadBlob(await canvasToBlob(renderFigure()), exportName()),
-              copy: () => copyImage(canvasToBlob(renderFigure())),
-              caption,
-            }}
+            disabled={mode === 'season' ? !site?.manifest.netcdf.length : renderedPanels === 0}
+            actions={
+              mode === 'season'
+                ? {
+                    save: async () => {
+                      if (!seasonRef.current) throw new Error('The season view is not ready yet.');
+                      downloadBlob(await elementToBlob(seasonRef.current, exportBackground()), timestampedName([site?.manifest.siteId, 'season'], 'png'));
+                    },
+                    copy: () => copyImage(seasonRef.current ? elementToBlob(seasonRef.current, exportBackground()) : Promise.reject(new Error('Not ready'))),
+                  }
+                : {
+                    save: async () => downloadBlob(await canvasToBlob(renderFigure()), exportName()),
+                    copy: () => copyImage(canvasToBlob(renderFigure())),
+                    caption,
+                  }
+            }
           />
         </div>
       </div>
@@ -302,7 +313,9 @@ export function PhenometricsView() {
         */}
         {mode === 'season' ? (
           site?.manifest.netcdf.length ? (
-            <PhenoSeason manifest={site.manifest} layer={layer} available={sharedLayers} />
+            <div ref={seasonRef} className="h-full bg-[var(--bg-elevated)]">
+              <PhenoSeason manifest={site.manifest} layer={layer} available={sharedLayers} />
+            </div>
           ) : (
             <EmptyState icon={<Layers size={22} />} title="No NetCDF imported for this site." />
           )

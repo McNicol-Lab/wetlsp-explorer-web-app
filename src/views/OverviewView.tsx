@@ -90,6 +90,7 @@ export function OverviewView() {
   const selectSite = useAppStore((s) => s.selectSite);
   const sites = useAppStore((s) => s.sites);
   const activeSiteId = useAppStore((s) => s.activeSiteId);
+  const catalogIndex = useAppStore((s) => s.catalogIndex);
   const openInspector = useAppStore((s) => s.openInspector);
   const activeGeometry = useAppStore((s) => (s.activeSiteId ? s.sites[s.activeSiteId]?.geometry ?? null : null));
 
@@ -231,9 +232,21 @@ export function OverviewView() {
         getTooltip={(info) => {
           const s = info.object as MapSite | undefined;
           if (!s) return null;
-          return `<b>${s.label}</b><br/>${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}${
-            s.loaded ? '<br/><span style="opacity:.7">Imported · click to open</span>' : '<br/><span style="opacity:.7">Catalog only</span>'
-          }`;
+          const record = catalogIndex.get(s.siteId);
+          const loadedId = Object.keys(sites).find((id) => id.replace(/[-_]/g, '').toLowerCase() === s.siteId.replace(/[-_]/g, '').toLowerCase());
+          const st = loadedId ? sites[loadedId] : null;
+          const marks = { full: '●', partial: '◐', catalog: '○', none: '–' } as const;
+          const years = yearAvailability(st?.manifest ?? null, st?.facts?.years ?? [], record)
+            .map((y) => `<span style="white-space:nowrap">${marks[y.state]} ${y.year}</span>`)
+            .join('&ensp;');
+          const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+          return [
+            `<div style="display:flex;align-items:center;gap:6px;font-size:11px;opacity:.75"><b style="font-weight:600">${esc(s.siteId)}</b>${record?.country ? `· ${esc(record.country)}` : ''}</div>`,
+            `<div style="font-size:13px;font-weight:600;margin-top:2px">${esc(record?.site_name ?? s.siteId)}</div>`,
+            `<div style="font-size:11px;opacity:.7;font-variant-numeric:tabular-nums">${s.lat.toFixed(3)}, ${s.lon.toFixed(3)}</div>`,
+            years ? `<div style="font-size:11px;margin-top:6px;color:var(--accent);font-variant-numeric:tabular-nums">${years}</div>` : '',
+            `<div style="font-size:10.5px;margin-top:5px;opacity:.65">${s.loaded ? 'Imported · click to open' : 'Catalog only'}</div>`,
+          ].join('');
         }}
         className="relative min-h-0 w-full flex-1 card overflow-hidden"
       >

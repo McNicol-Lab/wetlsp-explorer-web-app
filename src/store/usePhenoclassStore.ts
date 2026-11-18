@@ -17,7 +17,7 @@ import type { DiagnosticsResult, RunManifest } from '@/lib/phenoclass/model';
 import { CancelledError } from '@/lib/rpc';
 import type { ProgressEvent, SiteManifest } from '@/lib/types';
 
-export type PhenoclassSection = 'build' | 'maps' | 'cover' | 'waveforms';
+export type PhenoclassSection = 'build' | 'maps' | 'cover' | 'transitions' | 'waveforms';
 export type JobKind = 'inspect' | 'diagnose' | 'train' | 'apply';
 
 export interface BuildConfig {

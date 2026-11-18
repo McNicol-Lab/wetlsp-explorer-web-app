@@ -11,7 +11,9 @@ import type { Layer, PickingInfo } from '@deck.gl/core';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import {
   Eraser, LassoSelect, MapPin, MousePointer2, Send, Shapes, Shuffle, Square, Upload,
+  Columns2,
 } from 'lucide-react';
+import clsx from 'clsx';
 import { MapCanvas, type MapCanvasHandle } from '@/components/MapCanvas';
 import { MetricBubble } from '@/components/viz/MetricBubble';
 import { Button, Card, Chip, EmptyState, Field, Segmented, Slider } from '@/components/ui';
@@ -21,7 +23,10 @@ import { ErrorPanel, seriesColor, useAsyncData, useBasemap, useDark } from './sh
 import { getPixelMeans, getPixelTrace, pixelsInPolygon } from '@/engine/queries';
 import { nearestPixelIndex } from '@/lib/pixelPicking';
 import { pixelIndex } from '@/lib/pixelIndex';
-import { GREENNESS_RAMP, rampToCssGradient, sampleRamp } from '@/lib/colorscales';
+import { GREENNESS_RAMP, makeColorScale, rampToCssGradient, sampleRamp } from '@/lib/colorscales';
+import { ClipExtension } from '@deck.gl/extensions';
+import { percentileOf, readPixelLayer, sortedFinite, type PixelLayerValues } from './pixelMetric';
+import { layerInfo } from '@/lib/layers';
 import { compositeCanvas, downloadBlob, downloadCsv, exportBackground, timestampedName } from '@/lib/export';
 import { canvasToBlob, copyImage } from '@/lib/figure';
 import { FigureMenu } from '@/components/FigureMenu';
@@ -54,7 +59,12 @@ export function PixelMapView() {
   const [mode3d, setMode3d] = useState(false);
   // On by default: per-pixel means come from the prepared year tables, so
   // colouring the cloud costs nothing once the site has loaded.
-  const [colorByEvi, setColorByEvi] = useState(true);
+  // What colours the pixels: nothing, mean EVI, or a NetCDF phenometric layer.
+  const [metric, setMetric] = useState<string>('evi');
+  const colorByEvi = metric === 'evi';
+  const [compareYear, setCompareYear] = useState<number | null>(null);
+  const [divider, setDivider] = useState(0.5);
+  const [clipLon, setClipLon] = useState<number | null>(null);
   const [hexRadius, setHexRadius] = useState(24);
   const [map, setMap] = useState<MapLibreMap | null>(null);
 
@@ -109,30 +119,7 @@ export function PixelMapView() {
   );
 
   const focusedPixel = useAppStore((s) => s.focusedPixel);
-  // Sorted site means, for the selected pixel's percentile.
-  const sortedMeans = useMemo(() => {
-    const m = means.data;
-    if (!m || m.size === 0) return null;
-    return Float64Array.from(m.values()).sort();
-  }, [means.data]);
-  const bubble = useMemo(() => {
-    if (focusedPixel === null || !geometry || !means.data) return null;
-    const i = pixelIndex(geometry.pixelId, focusedPixel);
-    const v = means.data.get(focusedPixel);
-    if (i < 0 || v === undefined || !Number.isFinite(v)) return null;
-    let pct: number | null = null;
-    if (sortedMeans && sortedMeans.length > 1) {
-      let lo = 0;
-      let hi = sortedMeans.length;
-      while (lo < hi) {
-        const mid = (lo + hi) >> 1;
-        if (sortedMeans[mid] <= v) lo = mid + 1;
-        else hi = mid;
-      }
-      pct = (lo / sortedMeans.length) * 100;
-    }
-    return { lon: geometry.lon[i], lat: geometry.lat[i], value: v, pct };
-  }, [focusedPixel, geometry, means.data, sortedMeans]);
+
 
   const meanRange = useMemo(() => {
     const m = means.data;
@@ -145,6 +132,95 @@ export function PixelMapView() {
     }
     return [lo, hi] as [number, number];
   }, [means.data]);
+
+  const ncYears = useMemo(
+    () => [...new Set(site?.manifest.netcdf.map((f) => f.year) ?? [])].sort((a, b) => a - b),
+    [site?.manifest],
+  );
+  const isLayer = metric !== 'evi' && metric !== 'none';
+  const yearA = isLayer
+    ? ts.year !== null && ncYears.includes(ts.year) ? ts.year : (ncYears[ncYears.length - 1] ?? null)
+    : ts.year;
+  const compareChoices = (isLayer ? ncYears : (site?.facts?.years ?? [])).filter((y) => y !== yearA);
+  const comparing = compareYear !== null && compareChoices.includes(compareYear) && metric !== 'none' && !mode3d;
+
+  const layerA = useAsyncData<PixelLayerValues | null>(
+    async ({ signal, onProgress }) =>
+      site?.manifest && geometry && yearA !== null ? readPixelLayer(site.manifest, geometry, yearA, metric, { signal, onProgress }) : null,
+    [site?.manifest.siteId, geometry, yearA, metric],
+    { enabled: isLayer && Boolean(geometry) && yearA !== null },
+  );
+  const valuesB = useAsyncData<Float32Array | null>(
+    async ({ signal, onProgress }) => {
+      if (!site?.manifest || !geometry || compareYear === null) return null;
+      if (isLayer) return (await readPixelLayer(site.manifest, geometry, compareYear, metric, { signal, onProgress })).values;
+      return meansToArray(await getPixelMeans(site.manifest, [compareYear], ts.series.slice(0, 1), { signal, onProgress }), geometry);
+    },
+    [site?.manifest.siteId, geometry, compareYear, metric, ts.series[0]],
+    { enabled: comparing && Boolean(geometry) },
+  );
+  const valuesA = useMemo(
+    () => (isLayer ? (layerA.data?.values ?? null) : colorByEvi && means.data && geometry ? meansToArray(means.data, geometry) : null),
+    [isLayer, layerA.data, colorByEvi, means.data, geometry],
+  );
+  const compareValues = comparing ? (valuesB.data ?? null) : null;
+  // One scale for both sides of a comparison, so colours mean the same thing.
+  const domain = useMemo(() => finiteRange([valuesA, compareValues]), [valuesA, compareValues]);
+  const scale = useMemo(() => (isLayer && domain ? makeColorScale(metric, domain) : null), [isLayer, metric, domain]);
+  const colorsOf = useCallback(
+    (vals: Float32Array | null): Uint8Array | null => {
+      if (!vals || !domain) return null;
+      const out = new Uint8Array(vals.length * 4);
+      const [lo, hi] = domain;
+      const span = hi - lo || 1;
+      for (let i = 0; i < vals.length; i++) {
+        const v = vals[i];
+        let c: number[];
+        if (!Number.isFinite(v)) c = MISSING_RGBA;
+        else if (scale) {
+          const rgba = scale.color(v);
+          c = rgba[3] === 0 ? MISSING_RGBA : [rgba[0], rgba[1], rgba[2], 255];
+        } else {
+          const [r, g, b] = sampleRamp(GREENNESS_RAMP, (v - lo) / span);
+          c = [r, g, b, 255];
+        }
+        out[i * 4] = c[0];
+        out[i * 4 + 1] = c[1];
+        out[i * 4 + 2] = c[2];
+        out[i * 4 + 3] = c[3];
+      }
+      return out;
+    },
+    [domain, scale],
+  );
+  const colorsA = useMemo(() => colorsOf(valuesA), [colorsOf, valuesA]);
+  const colorsB = useMemo(() => colorsOf(compareValues), [colorsOf, compareValues]);
+  const sortedA = useMemo(() => (valuesA ? sortedFinite(valuesA) : null), [valuesA]);
+  const bubble = useMemo(() => {
+    if (focusedPixel === null || !geometry || !valuesA) return null;
+    const i = pixelIndex(geometry.pixelId, focusedPixel);
+    if (i < 0) return null;
+    const v = valuesA[i];
+    if (!Number.isFinite(v)) return null;
+    return { lon: geometry.lon[i], lat: geometry.lat[i], value: v, pct: sortedA ? percentileOf(sortedA, v) : null };
+  }, [focusedPixel, geometry, valuesA, sortedA]);
+  const missingA = useMemo(() => (valuesA ? valuesA.reduce((k, v) => (Number.isFinite(v) ? k : k + 1), 0) : 0), [valuesA]);
+
+  // The swipe divider is a screen position; the clip is a longitude.
+  useEffect(() => {
+    if (!map || !comparing) return;
+    const update = () => {
+      const c = map.getContainer();
+      setClipLon(map.unproject([c.clientWidth * divider, c.clientHeight / 2]).lng);
+    };
+    update();
+    map.on('move', update);
+    map.on('resize', update);
+    return () => {
+      map.off('move', update);
+      map.off('resize', update);
+    };
+  }, [map, comparing, divider]);
 
   const regionStack = useMemo(
     () => (geometry && !mode3d ? regionLayers(regions, geometry, dark) : []),
@@ -194,21 +270,7 @@ export function PixelMapView() {
       ];
     }
 
-    const baseColors = (() => {
-      if (!colorByEvi || !means.data || !meanRange) return null;
-      const arr = new Uint8Array(n * 3);
-      const [lo, hi] = meanRange;
-      const span = hi - lo || 1;
-      for (let i = 0; i < n; i++) {
-        const v = means.data.get(geometry.pixelId[i]);
-        const c =
-          v === undefined ? [140, 148, 160] : sampleRamp(GREENNESS_RAMP, (v - lo) / span);
-        arr[i * 3] = c[0];
-        arr[i * 3 + 1] = c[1];
-        arr[i * 3 + 2] = c[2];
-      }
-      return arr;
-    })();
+    const baseColors = metric === 'none' ? null : colorsA;
 
     const out: Layer[] = [
       ...under,
@@ -218,7 +280,7 @@ export function PixelMapView() {
           length: n,
           attributes: {
             getPosition: { value: positions, size: 2 },
-            ...(baseColors ? { getFillColor: { value: baseColors, size: 3, normalized: true } } : {}),
+            ...(baseColors ? { getFillColor: { value: baseColors, size: 4, normalized: true } } : {}),
           },
         },
         getFillColor: baseColors ? undefined : dark ? [150, 162, 178, 175] : [96, 108, 126, 165],
@@ -231,6 +293,28 @@ export function PixelMapView() {
         highlightColor: [255, 255, 255, 200],
       }),
     ];
+    if (comparing && colorsB && clipLon !== null) {
+      // The comparison year, clipped to the right of the divider: same pixels, same scale.
+      out.push(
+        new ScatterplotLayer({
+          id: 'compare-pixels',
+          data: {
+            length: n,
+            attributes: {
+              getPosition: { value: positions, size: 2 },
+              getFillColor: { value: colorsB, size: 4, normalized: true },
+            },
+          },
+          getRadius: 1.6,
+          radiusUnits: 'meters',
+          radiusMinPixels: 2.2,
+          radiusMaxPixels: 9,
+          pickable: false,
+          extensions: [new ClipExtension()],
+          clipBounds: [clipLon, -90, 180, 90],
+        }),
+      );
+    }
 
     if (plotted.length > 0) {
       out.push(
@@ -273,7 +357,7 @@ export function PixelMapView() {
     }
 
     return [...out, ...over];
-  }, [geometry, positions, selection, plotted, dark, mode3d, hexRadius, colorByEvi, means.data, meanRange, subset, siteSpanMeters, overlayLayer, regionStack]);
+  }, [geometry, positions, selection, plotted, dark, mode3d, hexRadius, means.data, meanRange, subset, siteSpanMeters, overlayLayer, regionStack, metric, colorsA, colorsB, comparing, clipLon]);
 
   const onPick = useCallback(
     (info: PickingInfo) => {
@@ -416,14 +500,21 @@ export function PixelMapView() {
       className="relative h-full w-full card overflow-hidden"
     >
       <DrawOverlay tool={tool} map={map} onShape={finishShape} />
-      {bubble && colorByEvi && !mode3d && (
+      {comparing && colorsB && (
+        <SwipeDivider value={divider} onChange={setDivider} left={String(yearA)} right={String(compareYear)} />
+      )}
+      {comparing && valuesB.loading && (
+        <div className="pointer-events-none absolute left-1/2 top-16 z-20 -translate-x-1/2"><Chip className="bg-[var(--bg-elevated)]">Reading {compareYear}…</Chip></div>
+      )}
+      {bubble && metric !== 'none' && !mode3d && (
         <MetricBubble
           key={focusedPixel}
           map={map}
           lon={bubble.lon}
           lat={bubble.lat}
-          label={`Mean ${ts.series[0] ?? 'spline'} EVI ${ts.year}`}
+          label={isLayer ? `${metric} ${yearA}${layerInfo(metric).units ? ` · ${layerInfo(metric).units}` : ''}` : `Mean ${ts.series[0] ?? 'spline'} EVI ${yearA}`}
           value={bubble.value}
+          digits={isLayer && !/EVI/.test(metric) ? 0 : 3}
           percentile={bubble.pct}
           onClose={() => setFocusedPixel(null)}
         />
@@ -469,7 +560,7 @@ export function PixelMapView() {
           />
         </div>
 
-        <div className="pointer-events-auto flex items-center gap-1.5">
+        <div className="pointer-events-auto flex max-w-[52%] flex-wrap items-center justify-end gap-1.5">
           <Segmented
             size="sm"
             value={mode3d ? '3d' : '2d'}
@@ -479,19 +570,37 @@ export function PixelMapView() {
               { value: '3d', label: 'Skyline' },
             ]}
           />
-          <Button
-            size="sm"
-            active={colorByEvi}
-            onClick={() => setColorByEvi(!colorByEvi)}
-            disabled={!site.manifest.timeseries || ts.year === null}
-            title={
-              site.manifest.timeseries
-                ? `Colour pixels by their mean ${ts.series[0] ?? 'spline'} EVI in ${ts.year ?? '—'}`
-                : 'This site has no time series to average'
-            }
-          >
-            {means.loading ? 'Averaging…' : 'Mean EVI'}
-          </Button>
+          <label className="flex h-7 items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] pl-2 text-[12px] text-[var(--text-muted)]" title="What colours the pixels">
+            <span className="h-2 w-2 rounded-full" style={{ background: metric === 'none' ? 'var(--text-faint)' : 'var(--accent)' }} />
+            <select
+              aria-label="Pixel colour metric"
+              value={metric}
+              onChange={(e) => setMetric(e.target.value)}
+              className="h-full cursor-pointer bg-transparent pr-2 font-medium text-[var(--text)] outline-none"
+            >
+              <option value="none">Plain</option>
+              <option value="evi" disabled={!site.manifest.timeseries}>Mean EVI</option>
+              {ncYears.length > 0 && (
+                <optgroup label="Phenometrics">
+                  {PIXEL_LAYERS.map((l) => <option key={l} value={l}>{l}</option>)}
+                </optgroup>
+              )}
+            </select>
+          </label>
+          {metric !== 'none' && !mode3d && compareChoices.length > 0 && (
+            <label className={clsx('flex h-7 items-center gap-1.5 rounded-md border pl-2 text-[12px]', comparing ? 'border-[var(--accent)] bg-[var(--pale)] text-[var(--accent)]' : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-muted)]')} title="Compare the same metric between two years with a swipe divider">
+              <Columns2 size={13} />
+              <select
+                aria-label="Compare with year"
+                value={comparing ? String(compareYear) : ''}
+                onChange={(e) => setCompareYear(e.target.value ? Number(e.target.value) : null)}
+                className="h-full cursor-pointer bg-transparent pr-2 font-medium text-[var(--text)] outline-none"
+              >
+                <option value="">Compare</option>
+                {compareChoices.map((y) => <option key={y} value={y}>{yearA} vs {y}</option>)}
+              </select>
+            </label>
+          )}
           <FigureMenu actions={figureActions} />
         </div>
       </div>
@@ -513,17 +622,29 @@ export function PixelMapView() {
             {formatCount(selection.length)} selected
           </Chip>
         )}
-        {colorByEvi && meanRange && (
-          <Chip title={`Pixel colour: mean ${ts.series[0] ?? 'spline'} EVI in ${ts.year ?? ''}`}>
-            <span className="text-[var(--text-muted)]">mean EVI {ts.year}</span>
-            <span className="tabular-nums">{formatValue(meanRange[0], 2)}</span>
+        {metric !== 'none' && domain && (
+          <Chip
+            className="bg-[var(--bg-elevated)]"
+            title={`${isLayer ? `${metric}: ${layerInfo(metric).description}` : `Mean ${ts.series[0] ?? 'spline'} EVI`} · colour range is the 2–98th percentile; values beyond it take the end colours${comparing ? ' · one scale for both years' : ''}`}
+          >
+            <span className="text-[var(--text-muted)]">{isLayer ? metric : 'mean EVI'} {comparing ? `${yearA} | ${compareYear}` : yearA}</span>
+            <span className="tabular-nums">{formatValue(domain[0], isLayer && !scale?.discrete ? 0 : 2)}</span>
             <span
               className="h-2 w-16 rounded-full"
-              style={{ background: rampToCssGradient(GREENNESS_RAMP) }}
+              style={{ background: scale ? rampToCssGradient(scale.stops, scale.discrete) : rampToCssGradient(GREENNESS_RAMP) }}
             />
-            <span className="tabular-nums">{formatValue(meanRange[1], 2)}</span>
+            <span className="tabular-nums">{formatValue(domain[1], isLayer && !scale?.discrete ? 0 : 2)}</span>
+            {isLayer && layerInfo(metric).units && <span className="text-[var(--text-faint)]">{layerInfo(metric).units}</span>}
           </Chip>
         )}
+        {metric !== 'none' && missingA > 0 && (
+          <Chip className="bg-[var(--bg-elevated)]" title="Pixels with no estimate for this metric are drawn light grey, never as zero">
+            <span className="h-2 w-2 rounded-full" style={{ background: 'rgb(186 192 186)' }} />
+            {formatCount(missingA)} no estimate
+          </Chip>
+        )}
+        {isLayer && layerA.loading && <Chip className="bg-[var(--bg-elevated)]">Reading {metric}…</Chip>}
+        {isLayer && layerA.error && <Chip tone="danger" title={layerA.error}>{metric} unavailable</Chip>}
         {regions.length > 0 && !mode3d && (
           <Chip title="Regions on this site (compared / total)">
             <Shapes size={11} />
@@ -913,5 +1034,77 @@ function PixelFacts({ geometry, pixelId }: { geometry: PixelGeometry; pixelId: n
         </div>
       ))}
     </dl>
+  );
+}
+
+/** Pixels with no value for the metric: grey and lighter, never coloured as zero. */
+const MISSING_RGBA = [186, 192, 186, 120];
+
+/** Layers a pixel can be coloured by, when its year's NetCDF holds them. */
+const PIXEL_LAYERS = ['OGI', '50PCGI', 'OGMx', 'Peak', 'OGD', '50PCGD', 'OGMn', 'EVImax', 'EVIamp', 'EVIarea', 'NumCycles'];
+
+function meansToArray(means: Map<number, number>, geometry: PixelGeometry): Float32Array {
+  const out = new Float32Array(geometry.pixelId.length).fill(NaN);
+  for (let i = 0; i < out.length; i++) {
+    const v = means.get(geometry.pixelId[i]);
+    if (v !== undefined) out[i] = v;
+  }
+  return out;
+}
+
+/** The 2nd–98th percentile of every finite value: a few outliers do not wash out the map. */
+function finiteRange(arrays: Array<Float32Array | null>): [number, number] | null {
+  const all = arrays.filter(Boolean).map((a) => sortedFinite(a!));
+  const n = all.reduce((k, a) => k + a.length, 0);
+  if (n === 0) return null;
+  const merged = new Float32Array(n);
+  let k = 0;
+  for (const a of all) {
+    merged.set(a, k);
+    k += a.length;
+  }
+  merged.sort();
+  const lo = merged[Math.floor(0.02 * (n - 1))];
+  const hi = merged[Math.ceil(0.98 * (n - 1))];
+  return hi === lo ? [lo - 0.5, hi + 0.5] : [lo, hi];
+}
+
+/** A draggable vertical divider: left of it the first year, right the comparison. */
+function SwipeDivider({ value, onChange, left, right }: { value: number; onChange: (v: number) => void; left: string; right: string }) {
+  const move = (e: React.PointerEvent<HTMLDivElement>) => {
+    const host = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+    onChange(Math.min(0.95, Math.max(0.05, (e.clientX - host.left) / host.width)));
+  };
+  return (
+    <>
+      <div className="pointer-events-none absolute inset-y-0 z-[15] w-px bg-[var(--accent-strong)] shadow-[0_0_0_1px_rgb(255_255_255/0.6)]" style={{ left: `${value * 100}%` }} />
+      <div className="pointer-events-none absolute top-[60px] z-[15] flex -translate-x-1/2 items-center gap-10" style={{ left: `${value * 100}%` }}>
+        <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] font-semibold tabular-nums shadow-[var(--shadow-pop)]">{left}</span>
+        <span className="rounded-full bg-[var(--accent-strong)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white shadow-[var(--shadow-pop)]">{right}</span>
+      </div>
+      <div
+        role="slider"
+        aria-label="Comparison divider"
+        aria-valuemin={5}
+        aria-valuemax={95}
+        aria-valuenow={Math.round(value * 100)}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft') onChange(Math.max(0.05, value - 0.02));
+          if (e.key === 'ArrowRight') onChange(Math.min(0.95, value + 0.02));
+        }}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          move(e);
+        }}
+        onPointerMove={(e) => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) move(e);
+        }}
+        className="absolute top-1/2 z-20 grid h-9 w-9 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize place-items-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] shadow-[var(--shadow-pop)]"
+        style={{ left: `${value * 100}%` }}
+      >
+        <Columns2 size={14} className="text-[var(--accent-strong)]" />
+      </div>
+    </>
   );
 }

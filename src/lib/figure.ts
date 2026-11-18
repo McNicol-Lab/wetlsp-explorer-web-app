@@ -78,3 +78,49 @@ export async function runFigureAction(
     });
   }
 }
+
+/**
+ * A rendered element (HTML and inline SVG) as a PNG, for figures that are not
+ * Plotly charts or map canvases. Computed styles are inlined into an SVG
+ * foreignObject, so theme variables resolve to the colours on screen.
+ */
+export async function elementToBlob(el: HTMLElement, background: string, scale = 2): Promise<Blob> {
+  const w = Math.ceil(el.scrollWidth);
+  const h = Math.ceil(el.scrollHeight);
+  const clone = el.cloneNode(true) as HTMLElement;
+  inlineStyles(el, clone);
+  clone.style.margin = '0';
+  clone.style.width = `${w}px`;
+  clone.style.height = `${h}px`;
+  clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+  const xml = new XMLSerializer().serializeToString(clone);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+    `<foreignObject x="0" y="0" width="100%" height="100%">${xml}</foreignObject></svg>`;
+  const img = new Image();
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  await img.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = w * scale;
+  canvas.height = h * scale;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('This view could not be rendered to an image.');
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, 0, 0);
+  return canvasToBlob(canvas);
+}
+
+function inlineStyles(src: Element, dst: Element): void {
+  const cs = getComputedStyle(src);
+  let css = '';
+  for (let i = 0; i < cs.length; i++) {
+    const p = cs[i];
+    // Animations would freeze mid-frame; a figure is the settled state.
+    if (p.startsWith('animation') || p.startsWith('transition')) continue;
+    css += `${p}:${cs.getPropertyValue(p)};`;
+  }
+  dst.setAttribute('style', css);
+  for (let i = 0; i < src.children.length; i++) inlineStyles(src.children[i], dst.children[i]);
+}
