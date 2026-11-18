@@ -116,7 +116,7 @@ export interface OverlayState {
 }
 
 /** `line`: mean lines; `years`: one line per year on a shared calendar; `3d`: surface. */
-export type TimeseriesChart = 'line' | 'years' | '3d';
+export type TimeseriesChart = 'line' | 'years' | 'multiples' | 'calendar' | '3d';
 
 export interface TimeseriesSettings {
   year: number | null;
@@ -1026,7 +1026,7 @@ async function forgetSite(manifest: SiteManifest): Promise<void> {
 function pickChartPrefs(p: Partial<TimeseriesSettings> | undefined): Partial<TimeseriesSettings> {
   if (!p) return {};
   const out: Partial<TimeseriesSettings> = {};
-  if (p.chart === 'line' || p.chart === 'years' || p.chart === '3d') out.chart = p.chart;
+  if (p.chart === 'line' || p.chart === 'years' || p.chart === 'multiples' || p.chart === 'calendar' || p.chart === '3d') out.chart = p.chart;
   for (const k of ['showMean', 'showIqr', 'showPixels', 'showKeyDates'] as const) {
     if (typeof p[k] === 'boolean') out[k] = p[k];
   }

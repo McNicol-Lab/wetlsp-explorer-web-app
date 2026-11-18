@@ -302,7 +302,7 @@ export function Segmented<T extends string>({
           title={o.title}
           onClick={() => onChange(o.value)}
           className={clsx(
-            'rounded-[4px] font-medium transition-colors duration-150 ease-[var(--ease-calm)]',
+            'whitespace-nowrap rounded-[6px] font-medium transition-colors duration-150 ease-[var(--ease-calm)]',
             size === 'sm' ? 'h-6 px-2 text-[12px]' : 'h-7 px-3 text-[12.5px]',
             value === o.value
               ? 'bg-[var(--bg-elevated)] text-[var(--text)] shadow-sm'

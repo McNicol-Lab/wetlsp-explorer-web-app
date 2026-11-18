@@ -8,7 +8,7 @@ import { Toasts } from '@/components/Toasts';
 import { CommandPalette } from '@/components/CommandPalette';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { DropOverlay, useGlobalDrop } from '@/components/DropTarget';
-import { ProgressBar } from '@/components/ui';
+import { BootLoader } from '@/components/BootLoader';
 import { SpaceDialog } from '@/components/StoragePanel';
 import { runFigureAction } from '@/lib/figure';
 import { ImportProgress } from '@/components/ImportProgress';
@@ -138,10 +138,8 @@ export default function App() {
       )}
 
       {!booted && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-[var(--bg)]">
-          <div className="w-[220px]">
-            <ProgressBar fraction={null} label="Starting WetLSP Explorer" />
-          </div>
+        <div className="boot-screen fixed inset-0 z-[80] grid place-items-center bg-[var(--bg)]">
+          <BootLoader />
         </div>
       )}
 

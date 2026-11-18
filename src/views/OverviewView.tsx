@@ -11,7 +11,10 @@ import { Button, Card, Chip, EmptyState } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { useImportActions } from '@/components/DropTarget';
 import clsx from 'clsx';
-import { useBasemap, useDark } from './shared';
+import { seriesColor, useAsyncData, useBasemap, useDark } from './shared';
+import { Sparkline } from '@/components/Sparkline';
+import { AvailabilityStrip, yearAvailability } from '@/components/viz/AvailabilityStrip';
+import { getDailySummary, samplePixelIds } from '@/engine/queries';
 import { formatBytes, formatCount, formatValue } from '@/lib/format';
 import { compositeCanvas, downloadBlob, exportBackground, timestampedName } from '@/lib/export';
 import { canvasToBlob, copyImage } from '@/lib/figure';
@@ -115,7 +118,7 @@ export function OverviewView() {
   }, [mapSites]);
 
   const layers = useMemo(() => {
-    const accent = dark ? [45, 212, 191] : [15, 118, 110];
+    const accent = dark ? [79, 209, 165] : [20, 125, 100];
     const neutral = dark ? [130, 142, 158] : [120, 130, 146];
     const focusNorm = focusId?.replace(/[-_]/g, '').toLowerCase();
     const footprint = activeGeometry
@@ -216,8 +219,7 @@ export function OverviewView() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-2">
-      <SiteSummaryBar />
+    <div className="flex h-full flex-col">
       <MapCanvas
         ref={mapRef}
         basemap={basemap}
@@ -235,7 +237,8 @@ export function OverviewView() {
         }}
         className="relative min-h-0 w-full flex-1 card overflow-hidden"
       >
-        <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]/95 px-2 py-1 text-[11px] text-[var(--text-muted)]">
+        <SiteInsightCard />
+        <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[11px] text-[var(--text-muted)]">
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[var(--accent)]" />Imported</span>
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[var(--text-faint)] opacity-70" />Catalog</span>
         </div>
@@ -274,29 +277,50 @@ function ImportButton() {
   return <Button size="sm" variant="primary" icon={<Upload size={13} />} onClick={openFolder}>Import dataset</Button>;
 }
 
-/** One line: the active site, what it holds, and the one obvious next step. */
-function SiteSummaryBar() {
+/**
+ * The active site as a small floating dashboard over the map: where it is,
+ * which years it holds, and a real EVI sparkline from a small pixel sample.
+ */
+function SiteInsightCard() {
   const activeSiteId = useAppStore((s) => s.activeSiteId);
   const state = useAppStore((s) => (s.activeSiteId ? s.sites[s.activeSiteId] : null));
   const record = useAppStore((s) => (s.activeSiteId ? s.catalogIndex.get(s.activeSiteId) : undefined));
   const setView = useAppStore((s) => s.setView);
   const openInspector = useAppStore((s) => s.openInspector);
   const setCatalogFocus = useAppStore((s) => s.setCatalogFocus);
+  const dark = useDark();
 
-  if (!activeSiteId || !state) {
-    return (
-      <div className="flex h-10 shrink-0 items-center justify-between gap-3 px-1 text-[13px] text-[var(--text-muted)]">
-        <span>Select a site on the map, or import one.</span>
-        <ImportButton />
-      </div>
-    );
-  }
+  const facts = state?.facts ?? null;
+  const manifest = state?.status === 'ready' ? state.manifest : null;
+  const series = facts?.series.includes('spline') ? 'spline' : (facts?.series[0] ?? null);
+  const year = facts?.years.length ? facts.years[facts.years.length - 1] : null;
+  const candidates = state?.geometry?.pixelId ?? null;
+  const SAMPLE = 100;
 
-  const facts = state.facts;
-  const years = [...new Set(state.manifest.netcdf.map((n) => n.year))].sort((a, b) => a - b);
+  const spark = useAsyncData<{ x: number[]; y: number[]; pixels: number; peak: number } | null>(
+    async ({ signal, onProgress }) => {
+      if (!manifest || !series || year === null) return null;
+      const { ids } = await samplePixelIds(manifest, [year], [series], SAMPLE, { signal, onProgress, seed: 7, candidates });
+      if (ids.length === 0) return null;
+      const rows = await getDailySummary(manifest, { years: [year], series: [series], pixelIds: ids }, { signal, onProgress });
+      const pts = rows.filter((r) => r.series === series && Number.isFinite(r.mean)).sort((a, b) => (a.date < b.date ? -1 : 1));
+      if (pts.length < 2) return null;
+      return {
+        x: pts.map((r) => Date.parse(`${r.date.slice(0, 10)}T00:00:00Z`)),
+        y: pts.map((r) => r.mean),
+        pixels: ids.length,
+        peak: Math.max(...pts.map((r) => r.mean)),
+      };
+    },
+    [manifest?.siteId, series, year, candidates],
+    { enabled: Boolean(manifest?.timeseries && series && year !== null) },
+  );
+
+  if (!activeSiteId || !state) return null;
+  const availability = yearAvailability(state.manifest, facts?.years ?? [], record);
   const status =
     state.status === 'error' ? { text: 'Failed to open', tone: 'text-red-600 dark:text-red-400' }
-    : state.status === 'loading' ? { text: 'Loading…', tone: 'text-amber-600 dark:text-amber-400' }
+    : state.status === 'loading' ? { text: 'Loading', tone: 'text-amber-600 dark:text-amber-400' }
     : state.notes.length ? { text: `${state.notes.length} note${state.notes.length > 1 ? 's' : ''}`, tone: 'text-amber-600 dark:text-amber-400' }
     : { text: 'Ready', tone: 'text-[var(--accent)]' };
   const next = state.manifest.timeseries
@@ -304,44 +328,79 @@ function SiteSummaryBar() {
     : state.geometry ? { view: 'pixelmap' as const, label: 'Open pixel map' }
     : state.manifest.netcdf.length ? { view: 'phenometrics' as const, label: 'Open phenometrics' }
     : null;
+  const pixels = facts?.pixelCount ?? state.geometry?.lon.length ?? null;
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-5 whitespace-nowrap px-1 text-[12px]">
-      <div className="min-w-0 truncate">
-        <span className="text-[14px] font-semibold tracking-[-0.01em]">{record?.site_name ?? activeSiteId}</span>
-        {record?.country && <span className="ml-2 hidden text-[var(--text-muted)] min-[1440px]:inline">{record.country}</span>}
-      </div>
-      <dl className="flex shrink-0 items-center gap-4">
-        <Stat label="Years" value={years.length ? (years.length > 1 ? `${years[0]}–${years[years.length - 1]}` : `${years[0]}`) : '—'} hint={years.length ? `NetCDF for ${years.join(', ')}` : 'No annual NetCDF imported'} />
-        <Stat label="Pixels" value={facts?.pixelCount ? formatCount(facts.pixelCount) : state.geometry ? formatCount(state.geometry.lon.length) : '—'} hint={state.meta.radius_m ? `${state.meta.radius_m} m extraction radius` : undefined} />
-        {!!facts?.series.length && <Stat className="hidden min-[1360px]:flex" label="EVI" value={facts.series.join(' + ')} hint="spline: smoothed, gap-filled · raw: observed acquisitions" />}
-        <div className="flex items-baseline gap-1.5">
-          <dt className="text-[var(--text-faint)]">Status</dt>
-          <dd className={clsx('font-medium', status.tone)}>{status.text}</dd>
+    <div
+      key={activeSiteId}
+      className="selection-pop absolute bottom-3 left-3 z-10 w-[296px] rounded-[14px] border border-[var(--border)] bg-[var(--bg-elevated)] p-3.5 shadow-[var(--shadow-pop)]"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-faint)]">
+            <span className="rounded-[5px] bg-[var(--pale)] px-1.5 py-px text-[var(--accent)]">{activeSiteId}</span>
+            {record?.country && <span className="truncate">{record.country}</span>}
+          </div>
+          <div className="mt-1 truncate text-[14px] font-semibold tracking-[-0.01em]" title={record?.site_name}>
+            {record?.site_name ?? activeSiteId}
+          </div>
         </div>
-      </dl>
-      <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        <Button size="sm" variant="ghost" icon={<Info size={13} />} onClick={() => { setCatalogFocus(activeSiteId); openInspector(); }}>
-          Details
-        </Button>
-        {next && state.status === 'ready' && (
-          <Button size="sm" variant="primary" onClick={() => setView(next.view)}>
-            {next.label} <ArrowRight size={13} />
-          </Button>
-        )}
+        <button
+          onClick={() => { setCatalogFocus(activeSiteId); openInspector(); }}
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--text-faint)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
+          title="Dataset details"
+          aria-label="Dataset details"
+        >
+          <Info size={14} />
+        </button>
       </div>
+
+      <div className="mt-3 rounded-[10px] bg-[var(--bg-sunken)] px-2.5 pb-1.5 pt-2">
+        <div className="flex items-baseline justify-between text-[11px] text-[var(--text-muted)]">
+          <span>{year !== null && series ? `${series} EVI · ${year}` : 'EVI'}</span>
+          {spark.data && <span className="tabular-nums">peak <b className="font-medium text-[var(--text)]">{spark.data.peak.toFixed(2)}</b></span>}
+        </div>
+        <div className="h-[46px]">
+          {spark.data ? (
+            <Sparkline
+              x={spark.data.x}
+              y={spark.data.y}
+              color={seriesColor(series ?? 'spline', dark)}
+              width={268}
+              height={46}
+              fill
+              label={`Daily mean ${series} EVI in ${year}, ${spark.data.pixels} sampled pixels`}
+            />
+          ) : spark.loading ? (
+            <div className="skeleton mt-2 h-[34px] w-full" />
+          ) : (
+            <div className="grid h-full place-items-center text-[11px] text-[var(--text-faint)]">
+              {state.manifest.timeseries ? 'No EVI for this year' : 'No EVI time series imported'}
+            </div>
+          )}
+        </div>
+        {spark.data && <div className="text-[10.5px] text-[var(--text-faint)]">mean of {spark.data.pixels} sampled pixels</div>}
+      </div>
+
+      <dl className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+        <div><dt className="text-[var(--text-faint)]">Pixels</dt><dd className="mt-0.5 text-[13px] font-medium tabular-nums">{pixels !== null ? formatCount(pixels) : '—'}</dd></div>
+        <div><dt className="text-[var(--text-faint)]">Radius</dt><dd className="mt-0.5 text-[13px] font-medium tabular-nums">{state.meta.radius_m ? `${state.meta.radius_m} m` : '—'}</dd></div>
+        <div><dt className="text-[var(--text-faint)]">Status</dt><dd className={clsx('mt-0.5 text-[13px] font-medium', status.tone)}>{status.text}</dd></div>
+      </dl>
+
+      <div className="mt-3 border-t border-[var(--border)] pt-2.5">
+        <AvailabilityStrip items={availability} />
+      </div>
+
+      {next && state.status === 'ready' && (
+        <Button size="sm" variant="primary" className="mt-3 w-full" onClick={() => setView(next.view)}>
+          {next.label} <ArrowRight size={13} />
+        </Button>
+      )}
     </div>
   );
 }
 
-function Stat({ label, value, hint, className }: { label: string; value: string; hint?: string; className?: string }) {
-  return (
-    <div className={clsx('flex items-baseline gap-1.5', className)} title={hint}>
-      <dt className="text-[var(--text-faint)]">{label}</dt>
-      <dd className="font-medium tabular-nums">{value}</dd>
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------- inspector */
 

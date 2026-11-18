@@ -41,6 +41,9 @@ import { newSeed } from '@/lib/sampling';
 import type { DailySummaryRow } from '@/lib/types';
 import { pixelLines, type PixelLine } from './timeseriesPlot';
 import { keyDates, type KeyDates } from './keyDates';
+import { SeasonRibbon } from '@/components/viz/SeasonRibbon';
+import { YearMultiples } from '@/components/viz/YearMultiples';
+import { CalendarHeatmap } from '@/components/viz/CalendarHeatmap';
 import {
   RegionSeasonCard,
   buildRegionTraces,
@@ -124,7 +127,7 @@ function useTimeseriesData() {
   const rangeKey = ts.dateRange ? ts.dateRange.join('..') : '';
 
   const enabled = Boolean(
-    manifest?.timeseries && year !== null && ts.series.length > 0 && ts.chart !== 'years' &&
+    manifest?.timeseries && year !== null && ts.series.length > 0 && !usesYears(ts.chart) &&
       !(ts.compareRegions && ts.chart === 'line'),
   );
 
@@ -170,7 +173,7 @@ function useYearsData() {
   const years = site?.facts?.years ?? [];
   const selectionKey = ts.useSelection ? selection.join(',') : '';
   const enabled = Boolean(
-    manifest?.timeseries && years.length > 0 && ts.series.length > 0 && ts.chart === 'years',
+    manifest?.timeseries && years.length > 0 && ts.series.length > 0 && usesYears(ts.chart),
   );
 
   return useAsyncData<YearsLoaded>(
@@ -196,6 +199,11 @@ function useYearsData() {
     [manifest?.siteId, years.join(','), ts.series.join(','), ts.maxPixels, selectionKey, ts.useSelection, ts.sampleSeed, candidates],
     { enabled, keepPrevious: true },
   );
+}
+
+/** Charts drawn from the every-year summary rather than the selected year. */
+function usesYears(chart: TimeseriesChart): boolean {
+  return chart === 'years' || chart === 'multiples';
 }
 
 /** The series key dates are read from: spline when present (smooth), else the first. */
@@ -230,12 +238,24 @@ export function TimeSeriesView() {
   const regionsState = useRegionsData();
   const chart = ts.chart;
   const comparing = ts.compareRegions && chart === 'line';
-  const state = comparing ? regionsState : chart === 'years' ? yearsState : lineState;
+  const state = comparing ? regionsState : usesYears(chart) ? yearsState : lineState;
   useEffect(() => {
     useRegionResults.setState({ loaded: comparing ? regionsState.data : null });
   }, [comparing, regionsState.data]);
 
   const kd = useKeyDates(lineState.data?.summary, ts.series);
+  // The plotted date extent, so the ribbon shares the chart's x axis.
+  const ribbonDomain = useMemo<[string, string] | null>(() => {
+    const rows = lineState.data?.summary;
+    if (!rows?.length) return null;
+    let a = rows[0].date;
+    let b = rows[0].date;
+    for (const r of rows) {
+      if (r.date < a) a = r.date;
+      if (r.date > b) b = r.date;
+    }
+    return [a, b];
+  }, [lineState.data?.summary]);
   useEffect(() => {
     useSeason.setState({ kd, series: primarySeries(ts.series), loaded: Boolean(lineState.data) });
   }, [kd, ts.series, lineState.data]);
@@ -396,8 +416,10 @@ export function TimeSeriesView() {
             onChange={(v) => update(v === 'line' ? { chart: v } : { chart: v, compareRegions: false })}
             options={[
               { value: 'line', label: 'Line', title: 'Daily mean, IQR band and key dates' },
-              { value: 'years', label: 'Compare years', title: 'Each year’s daily mean on one calendar' },
-              { value: '3d', label: '3D ribbon', title: 'The same data as a surface over date × pixel' },
+              { value: 'years', label: 'Overlay', title: 'Each year’s daily mean on one calendar' },
+              { value: 'multiples', label: 'By year', title: 'One small chart per year, shared scale, linked hover' },
+              { value: 'calendar', label: 'Calendar', title: 'The selected year as a day-by-day heatmap' },
+              { value: '3d', label: '3D', title: 'The same data as a surface over date × pixel' },
             ]}
           />
           {chart === 'line' && (
@@ -438,7 +460,7 @@ export function TimeSeriesView() {
           chart={chart}
           regionsData={comparing ? regionsState.data : null}
           lineData={lineState.data}
-          ready={Boolean(state.data)}
+          ready={Boolean(state.data) && chart !== 'multiples' && chart !== 'calendar'}
           chartRef={chartRef}
           describe={describe}
         />
@@ -461,6 +483,25 @@ export function TimeSeriesView() {
             title="Nothing plotted yet"
             body={comparing ? 'Turn on regions in the Pixel Map inspector.' : 'Choose a year and a series in the inspector.'}
           />
+        ) : chart === 'multiples' && yearsState.data ? (
+          <div className="panel-reveal absolute inset-0">
+            <YearMultiples
+              summary={yearsState.data.summary}
+              years={yearsState.data.years}
+              series={primarySeries(ts.series) ?? 'spline'}
+              color={seriesColor(primarySeries(ts.series) ?? 'spline', dark)}
+              activeYear={ts.year}
+              onPick={(y) => update({ year: y, chart: 'line' })}
+            />
+          </div>
+        ) : chart === 'calendar' && lineState.data && ts.year !== null ? (
+          <div className="panel-reveal absolute inset-0">
+            <CalendarHeatmap
+              summary={lineState.data.summary}
+              year={ts.year}
+              series={ts.series.includes('raw') ? 'raw' : (primarySeries(ts.series) ?? 'spline')}
+            />
+          </div>
         ) : (
           <PlotlyChart
             ref={chartRef}
@@ -471,6 +512,10 @@ export function TimeSeriesView() {
           />
         )}
       </div>
+
+      {chart === 'line' && !comparing && kd && ribbonDomain && (
+        <SeasonRibbon kd={kd} domain={ribbonDomain} series={primarySeries(ts.series) ?? 'spline'} />
+      )}
 
       <StatusFooter chart={chart} lineState={lineState} yearsState={yearsState} regionsState={comparing ? regionsState : null} />
     </div>
@@ -758,7 +803,7 @@ function StatusFooter({
 }) {
   const parts: string[] = [];
   let sampled = false;
-  const state = regionsState ?? (chart === 'years' ? yearsState : lineState);
+  const state = regionsState ?? (usesYears(chart) ? yearsState : lineState);
   if (regionsState) {
     const d = regionsState.data;
     if (d) {
@@ -767,7 +812,7 @@ function StatusFooter({
       const big = d.regions.filter((r) => r.sampleSize < r.poolSize).length;
       if (big) parts.push(`${big} sampled at random`);
     }
-  } else if (chart === 'years' && yearsState.data) {
+  } else if (usesYears(chart) && yearsState.data) {
     const d = yearsState.data;
     parts.push(`${d.years.length} years`);
     parts.push(d.usedSelection ? `${formatCount(d.pixels)} selected pixels` : `${ofAvailable(d.pixels, d.availablePixels)} pixels sampled`);
@@ -1171,8 +1216,11 @@ export function TimeSeriesInspector() {
 
       {ts.chart === 'line' && (ts.compareRegions ? <RegionSeasonCard /> : <SeasonCard />)}
 
-      <Card title="How to read it">
-        <ul className="space-y-1.5 text-[12px] leading-snug text-[var(--text-muted)]">
+      <details className="group border-t border-[var(--border)] px-4 py-3">
+        <summary className="cursor-pointer list-none text-[12px] font-medium marker:hidden">
+          <span className="mr-1 inline-block transition-transform group-open:rotate-90">›</span> How to read it
+        </summary>
+        <ul className="mt-2 space-y-1.5 text-[12px] leading-snug text-[var(--text-muted)]">
           <li>The bold line is the daily mean.</li>
           <li>The shaded band is the interquartile range across the plotted pixels, for each day.</li>
           <li>
@@ -1192,7 +1240,7 @@ export function TimeSeriesInspector() {
             acquisition: sparser, unsmoothed and noisier, drawn as points.
           </li>
         </ul>
-      </Card>
+      </details>
     </div>
   );
 }

@@ -31,22 +31,30 @@
  * data is the only thing allowed to be colourful.
  */
 :root {
-  --bg: #fafaf9;
+  --bg: #f8faf8;
   --bg-elevated: #ffffff;
-  --bg-sunken: #f3f4f2;
-  --bg-hover: #eef0ed;
-  --bg-active: #e7ebe8;
-  --bg-sidebar: #f5f6f4;
-  --border: #e5e9e6;
-  --border-strong: #cdd4cf;
-  --text: #202624;
+  --bg-sunken: #f1f5f1;
+  --bg-hover: #edf2ed;
+  --bg-active: #e7f6e5;
+  --bg-sidebar: #f1f5f1;
+  --border: #e3e9e3;
+  --border-strong: #cad3ca;
+  --text: #1e2824;
   --text-muted: #5f6a66;
   --text-faint: #6c7672;
   --shadow-sheet: -8px 0 24px -12px rgb(25 45 34 / 0.18);
-  --accent: #0f766e;
+  --accent: #147d64;
+  --accent-strong: #083d32;
   --accent-contrast: #ffffff;
+  --lime: #a5e87b;
+  --pale: #e7f6e5;
+  --grid: #edf1ed;
+  --season-off: #e3e9e3;
+  --season-rise: #a5e87b;
+  --season-fall: #6fbf8e;
   --shadow-card: 0 1px 2px rgb(25 45 34 / 0.025);
-  --series-spline: #0f766e;
+  --shadow-pop: 0 6px 20px -8px rgb(8 61 50 / 0.22), 0 1px 2px rgb(8 61 50 / 0.06);
+  --series-spline: #147d64;
   --series-raw: #ea580c;
   color-scheme: light;
 }
@@ -64,10 +72,18 @@
   --text: #e8ecf2;
   --text-muted: #98a3b3;
   --text-faint: #6b7789;
-  --accent: #2dd4bf;
-  --accent-contrast: #07211f;
+  --accent: #4fd1a5;
+  --accent-strong: #a5e87b;
+  --accent-contrast: #062a22;
+  --lime: #a5e87b;
+  --pale: #12302a;
+  --grid: #1c2530;
+  --season-off: #253140;
+  --season-rise: #7cc35a;
+  --season-fall: #2f8f72;
+  --shadow-pop: 0 8px 24px -8px rgb(0 0 0 / 0.7);
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px -16px rgb(0 0 0 / 0.7);
-  --series-spline: #2dd4bf;
+  --series-spline: #4fd1a5;
   --series-raw: #fb923c;
   color-scheme: dark;
 }
@@ -120,7 +136,7 @@
   .card {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 12px;
     box-shadow: none;
   }
   /* Numbers line up in tables, stats and axes. */
@@ -141,6 +157,38 @@
     line-height: 18px;
     color: var(--text-muted);
     white-space: nowrap;
+  }
+  /* Content arriving after a load: a short fade, nothing that delays reading values. */
+  .panel-reveal {
+    animation: reveal 180ms var(--ease-calm) both;
+  }
+  @keyframes reveal {
+    from {
+      opacity: 0;
+    }
+  }
+  /* A changed selection settles in: a short lift, never a slide across the screen. */
+  .selection-pop {
+    animation: selection-pop 180ms var(--ease-calm) both;
+  }
+  @keyframes selection-pop {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.99);
+    }
+  }
+  .boot-contour {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: contour 2.4s var(--ease-calm) infinite alternate;
+  }
+  @keyframes contour {
+    from {
+      transform: scale(0.94);
+    }
+    to {
+      transform: scale(1.03);
+    }
   }
   .panel-transition {
     transition:
@@ -246,6 +294,9 @@
   }
   .progress-live::after {
     display: none;
+  }
+  .boot-contour {
+    animation: none !important;
   }
 }
 

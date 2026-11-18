@@ -13,6 +13,7 @@ import {
   Eraser, LassoSelect, MapPin, MousePointer2, Send, Shapes, Shuffle, Square, Upload,
 } from 'lucide-react';
 import { MapCanvas, type MapCanvasHandle } from '@/components/MapCanvas';
+import { MetricBubble } from '@/components/viz/MetricBubble';
 import { Button, Card, Chip, EmptyState, Field, Segmented, Slider } from '@/components/ui';
 import { Sparkline } from '@/components/Sparkline';
 import { useActiveSite, useAppStore, useOverlay, useRegions } from '@/store/useAppStore';
@@ -107,6 +108,32 @@ export function PixelMapView() {
     [geometry],
   );
 
+  const focusedPixel = useAppStore((s) => s.focusedPixel);
+  // Sorted site means, for the selected pixel's percentile.
+  const sortedMeans = useMemo(() => {
+    const m = means.data;
+    if (!m || m.size === 0) return null;
+    return Float64Array.from(m.values()).sort();
+  }, [means.data]);
+  const bubble = useMemo(() => {
+    if (focusedPixel === null || !geometry || !means.data) return null;
+    const i = pixelIndex(geometry.pixelId, focusedPixel);
+    const v = means.data.get(focusedPixel);
+    if (i < 0 || v === undefined || !Number.isFinite(v)) return null;
+    let pct: number | null = null;
+    if (sortedMeans && sortedMeans.length > 1) {
+      let lo = 0;
+      let hi = sortedMeans.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (sortedMeans[mid] <= v) lo = mid + 1;
+        else hi = mid;
+      }
+      pct = (lo / sortedMeans.length) * 100;
+    }
+    return { lon: geometry.lon[i], lat: geometry.lat[i], value: v, pct };
+  }, [focusedPixel, geometry, means.data, sortedMeans]);
+
   const meanRange = useMemo(() => {
     const m = means.data;
     if (!m || m.size === 0) return null;
@@ -130,7 +157,7 @@ export function PixelMapView() {
     const under = [...(overlayLayer ? [overlayLayer] : []), ...regionStack.slice(0, 1)];
     const over = regionStack.slice(1);
     const n = geometry.pixelId.length;
-    const accent: [number, number, number] = dark ? [45, 212, 191] : [15, 118, 110];
+    const accent: [number, number, number] = dark ? [79, 209, 165] : [20, 125, 100];
     const secondary: [number, number, number] = dark ? [251, 146, 60] : [234, 88, 12];
 
     if (mode3d) {
@@ -389,6 +416,18 @@ export function PixelMapView() {
       className="relative h-full w-full card overflow-hidden"
     >
       <DrawOverlay tool={tool} map={map} onShape={finishShape} />
+      {bubble && colorByEvi && !mode3d && (
+        <MetricBubble
+          key={focusedPixel}
+          map={map}
+          lon={bubble.lon}
+          lat={bubble.lat}
+          label={`Mean ${ts.series[0] ?? 'spline'} EVI ${ts.year}`}
+          value={bubble.value}
+          percentile={bubble.pct}
+          onClose={() => setFocusedPixel(null)}
+        />
+      )}
       {importDialog}
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
@@ -469,7 +508,7 @@ export function PixelMapView() {
           </Chip>
         )}
         {selection.length > 0 && (
-          <Chip tone="accent">
+          <Chip tone="accent" className="bg-[var(--bg-elevated)]">
             <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
             {formatCount(selection.length)} selected
           </Chip>
