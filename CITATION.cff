@@ -5,8 +5,8 @@ message: >-
   "References and how to cite" in README.md.
 type: software
 title: WetLSP Explorer
-version: 1.4.0
-date-released: 2026-11-13
+version: 1.4.1
+date-released: 2026-11-17
 license: MIT
 repository-code: https://github.com/McNicol-Lab/wetlsp-explorer-web-app
 authors:

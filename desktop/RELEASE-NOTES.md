@@ -1,3 +1,16 @@
+**New in v1.4.1: the sample sites are now the lab's v1.0 datasets.**
+
+- **Download sample sites** now offers US-Uaf (University of Alaska,
+  Fairbanks), US-OWC (Old Woman Creek), US-Myb (Mayberry Wetland) and US-LA2
+  (Salvador WMA Freshwater Marsh), from the reprocessed v1.0 release. They
+  replace CA-DSM, FR-LGt, BR-SM1, US-BZF and CZ-Wet.
+- Each sample carries both the spline-smoothed daily EVI and the
+  per-acquisition raw EVI, plus the 2021–2024 phenometric NetCDFs.
+- Downloads come from sample release v3. Sites already imported from the
+  earlier samples stay in the app until you remove them.
+
+---
+
 **New in v1.4.0: Phenology Classes, with annual maps, class cover and seasonal waveforms.**
 
 - Open **Phenology Classes** (⌘6 / Ctrl+6) to build and save a classifier for

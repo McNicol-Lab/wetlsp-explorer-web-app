@@ -66,14 +66,13 @@ const SITE_DIRS = new Map(
 );
 
 /** Order and wording chosen by the lab. Sites without a zip are skipped. */
+// v1.0 datasets (Nov 2026) replace the earlier five sample sites. Names come
+// from the lab's site catalog; descriptions are ours until the lab's.
 const SITES = [
-  { siteId: 'CA-DSM', name: 'Delta salt marsh', description: 'Tidal high marsh on Boundary Bay, British Columbia' },
-  { siteId: 'FR-LGt', name: 'La Guette', description: 'Acidic fen in the Sologne, France, disturbed and invaded by purple moor-grass' },
-  { siteId: 'BR-SM1', name: 'Cachoeira do Sul', description: 'Flooded rice paddy, Rio Grande do Sul, Brazil' },
-  { siteId: 'US-BZF', name: 'Bonanza Creek fen', description: 'Rich fen in interior Alaska' },
-  { siteId: 'CZ-Wet', name: 'Třeboň wet meadow', description: 'Wet sedge meadow, Czechia' },
-  // Placeholder wording until the lab supplies its own.
-  { siteId: 'AU-Arc', name: 'Arcturus', description: 'Site in central Queensland, Australia' },
+  { siteId: 'US-Uaf', name: 'University of Alaska, Fairbanks', description: 'Black spruce on permafrost near Fairbanks, Alaska' },
+  { siteId: 'US-OWC', name: 'Old Woman Creek', description: 'Freshwater estuary marsh on Lake Erie, Ohio' },
+  { siteId: 'US-Myb', name: 'Mayberry Wetland', description: 'Restored freshwater marsh in the Sacramento–San Joaquin Delta, California' },
+  { siteId: 'US-LA2', name: 'Salvador WMA Freshwater Marsh', description: 'Freshwater marsh in coastal Louisiana' },
 ];
 
 /** Series the sample data carry. Both must be present; nothing else may be. */

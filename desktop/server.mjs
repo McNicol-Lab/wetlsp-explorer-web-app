@@ -18,7 +18,7 @@ const mime = {
  * (spline-only daily EVI and annual phenometrics). The dev server imports
  * this too, and scripts/publish-samples.mjs refuses to publish anywhere else.
  */
-export const SAMPLE_RELEASE = 'https://github.com/McNicol-Lab/wetlsp-sample-data/releases/download/v2/';
+export const SAMPLE_RELEASE = 'https://github.com/McNicol-Lab/wetlsp-sample-data/releases/download/v3/';
 const SAMPLE_ASSET = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
