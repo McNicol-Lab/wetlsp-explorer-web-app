@@ -1,270 +1,253 @@
 {
   "version": 1,
   "repo": "McNicol-Lab/wetlsp-sample-data",
-  "tag": "v2",
+  "tag": "v3",
   "sites": [
     {
-      "siteId": "CA-DSM",
-      "name": "Delta salt marsh",
-      "description": "Tidal high marsh on Boundary Bay, British Columbia",
-      "bytes": 192277987,
+      "siteId": "US-Uaf",
+      "name": "University of Alaska, Fairbanks",
+      "description": "Black spruce on permafrost near Fairbanks, Alaska",
+      "bytes": 427730324,
       "files": [
         {
-          "path": "CA-DSM-wetlsp-2021.nc",
-          "size": 8707215,
-          "asset": "CA-DSM--CA-DSM-wetlsp-2021.nc"
-        },
-        {
-          "path": "CA-DSM-wetlsp-2022.nc",
-          "size": 7564644,
-          "asset": "CA-DSM--CA-DSM-wetlsp-2022.nc"
-        },
-        {
-          "path": "CA-DSM-wetlsp-2023.nc",
-          "size": 8313556,
-          "asset": "CA-DSM--CA-DSM-wetlsp-2023.nc"
-        },
-        {
-          "path": "CA-DSM-wetlsp-2024.nc",
-          "size": 8918359,
-          "asset": "CA-DSM--CA-DSM-wetlsp-2024.nc"
-        },
-        {
-          "path": "CA_DSM_pixels_geom.parquet",
-          "size": 144855,
-          "asset": "CA-DSM--CA_DSM_pixels_geom.parquet"
-        },
-        {
-          "path": "CA_DSM_pixels_meta.parquet",
-          "size": 1581,
-          "asset": "CA-DSM--CA_DSM_pixels_meta.parquet"
-        },
-        {
-          "path": "CA_DSM_pixels_timeseries.parquet",
-          "size": 158617085,
-          "asset": "CA-DSM--CA_DSM_pixels_timeseries.parquet"
-        },
-        {
           "path": "README_parquet.json",
-          "size": 6562,
-          "asset": "CA-DSM--README_parquet.json"
+          "size": 11734,
+          "sha256": "b75339ecb3459f00020554be879bb5c1ee05f3364c560a4cdb57b9637fa29802",
+          "asset": "US-Uaf--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 4130,
-          "asset": "CA-DSM--README_parquet.md"
+          "size": 892,
+          "sha256": "10bc1a041d1480d5c2556aee28250cb0f3f7f94ec6f4435789af13c0bc318a79",
+          "asset": "US-Uaf--README_parquet.md"
+        },
+        {
+          "path": "US-Uaf-wetlsp-2021.nc",
+          "size": 8868093,
+          "sha256": "3847f26b6bb6a8a8b3cc5ebd6ae2a979e42cd754cc25047c43d4eb3cd3d9dbf1",
+          "asset": "US-Uaf--US-Uaf-wetlsp-2021.nc"
+        },
+        {
+          "path": "US-Uaf-wetlsp-2022.nc",
+          "size": 8003419,
+          "sha256": "ad5e10202abc768ef2cd7c372b591fe9657a037ef2421e589b83f29020791049",
+          "asset": "US-Uaf--US-Uaf-wetlsp-2022.nc"
+        },
+        {
+          "path": "US-Uaf-wetlsp-2023.nc",
+          "size": 7333561,
+          "sha256": "2ad7c60b22f8e4883911189c6439d0a08f4090a25192398e7a6c8c3fb9d1870a",
+          "asset": "US-Uaf--US-Uaf-wetlsp-2023.nc"
+        },
+        {
+          "path": "US-Uaf-wetlsp-2024.nc",
+          "size": 3772388,
+          "sha256": "f1b496435d2a26f30ae2e41b6b99b4430bdda3582d69568f03f40e2323c2055f",
+          "asset": "US-Uaf--US-Uaf-wetlsp-2024.nc"
+        },
+        {
+          "path": "US_Uaf_pixels_geom.parquet",
+          "size": 542593,
+          "sha256": "93495e4a6ffa7ef849949b6e57cc8cd95a08379643ebc8026d1948cf206d20dd",
+          "asset": "US-Uaf--US_Uaf_pixels_geom.parquet"
+        },
+        {
+          "path": "US_Uaf_pixels_meta.parquet",
+          "size": 1431,
+          "sha256": "f10b1c1e0c5647554efe1666516404ffb9fa759f33de24713d9359d534714e59",
+          "asset": "US-Uaf--US_Uaf_pixels_meta.parquet"
+        },
+        {
+          "path": "US_Uaf_pixels_timeseries.parquet",
+          "size": 399196213,
+          "sha256": "80c788c9f1ca0e7d99bdb9a58f54040b914ca562ff82e37044d8a63eac54f263",
+          "asset": "US-Uaf--US_Uaf_pixels_timeseries.parquet"
         }
       ]
     },
     {
-      "siteId": "FR-LGt",
-      "name": "La Guette",
-      "description": "Acidic fen in the Sologne, France, disturbed and invaded by purple moor-grass",
-      "bytes": 206933103,
+      "siteId": "US-OWC",
+      "name": "Old Woman Creek",
+      "description": "Freshwater estuary marsh on Lake Erie, Ohio",
+      "bytes": 403433542,
       "files": [
         {
-          "path": "FR-LGt-wetlsp-2021.nc",
-          "size": 8846047,
-          "asset": "FR-LGt--FR-LGt-wetlsp-2021.nc"
-        },
-        {
-          "path": "FR-LGt-wetlsp-2022.nc",
-          "size": 9781518,
-          "asset": "FR-LGt--FR-LGt-wetlsp-2022.nc"
-        },
-        {
-          "path": "FR-LGt-wetlsp-2023.nc",
-          "size": 9604624,
-          "asset": "FR-LGt--FR-LGt-wetlsp-2023.nc"
-        },
-        {
-          "path": "FR-LGt-wetlsp-2024.nc",
-          "size": 11048407,
-          "asset": "FR-LGt--FR-LGt-wetlsp-2024.nc"
-        },
-        {
-          "path": "FR_LGt_pixels_geom.parquet",
-          "size": 146689,
-          "asset": "FR-LGt--FR_LGt_pixels_geom.parquet"
-        },
-        {
-          "path": "FR_LGt_pixels_meta.parquet",
-          "size": 1602,
-          "asset": "FR-LGt--FR_LGt_pixels_meta.parquet"
-        },
-        {
-          "path": "FR_LGt_pixels_timeseries.parquet",
-          "size": 167493524,
-          "asset": "FR-LGt--FR_LGt_pixels_timeseries.parquet"
-        },
-        {
           "path": "README_parquet.json",
-          "size": 6562,
-          "asset": "FR-LGt--README_parquet.json"
+          "size": 12125,
+          "sha256": "ded4fdd95e549fea6a6b3cc732d23d3c4845512b45a4bebf94ddef5df0dca942",
+          "asset": "US-OWC--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 4130,
-          "asset": "FR-LGt--README_parquet.md"
+          "size": 1252,
+          "sha256": "fe624b6a6b74506d17a8473785f5cdcefa27849a7f0a5084c693aeda7dd10816",
+          "asset": "US-OWC--README_parquet.md"
+        },
+        {
+          "path": "US-OWC-wetlsp-2021.nc",
+          "size": 14078651,
+          "sha256": "2a20e91cc5dfbf14acfd5c2d8616029efbcb230d7e9ae08ba15627516a1e1cfa",
+          "asset": "US-OWC--US-OWC-wetlsp-2021.nc"
+        },
+        {
+          "path": "US-OWC-wetlsp-2022.nc",
+          "size": 14172944,
+          "sha256": "71c32d79cf7876c97184cfaa693c31dfe33159f3c115dcf8fc4d975247a15c82",
+          "asset": "US-OWC--US-OWC-wetlsp-2022.nc"
+        },
+        {
+          "path": "US-OWC-wetlsp-2023.nc",
+          "size": 9888859,
+          "sha256": "894e38060ff23742520bcf173bb65afa260171ef16ac026760a581fcd160c56f",
+          "asset": "US-OWC--US-OWC-wetlsp-2023.nc"
+        },
+        {
+          "path": "US-OWC-wetlsp-2024.nc",
+          "size": 4812572,
+          "sha256": "fb6ad0e1d62785a36f67cae44cd953bfdeb307171598586a396ec3a79e5d7a44",
+          "asset": "US-OWC--US-OWC-wetlsp-2024.nc"
+        },
+        {
+          "path": "US_OWC_pixels_geom.parquet",
+          "size": 857441,
+          "sha256": "9a9db53c030452f17ee425f3a9f6ddf1a5d614a0f7a31cd838c897483a0ee758",
+          "asset": "US-OWC--US_OWC_pixels_geom.parquet"
+        },
+        {
+          "path": "US_OWC_pixels_meta.parquet",
+          "size": 1508,
+          "sha256": "cb0a697d94c2b304b229cf22e1ac9a8a6847c007695264868f4377ddd09ea5ab",
+          "asset": "US-OWC--US_OWC_pixels_meta.parquet"
+        },
+        {
+          "path": "US_OWC_pixels_timeseries.part-1-of-1.parquet",
+          "size": 359608190,
+          "sha256": "5d1674d4280f06abbb621e3de0603df4e59954fdf6ee107c0435fad58a04c555",
+          "asset": "US-OWC--US_OWC_pixels_timeseries.part-1-of-1.parquet"
         }
       ]
     },
     {
-      "siteId": "BR-SM1",
-      "name": "Cachoeira do Sul",
-      "description": "Flooded rice paddy, Rio Grande do Sul, Brazil",
-      "bytes": 214293648,
+      "siteId": "US-Myb",
+      "name": "Mayberry Wetland",
+      "description": "Restored freshwater marsh in the Sacramento–San Joaquin Delta, California",
+      "bytes": 777530979,
       "files": [
         {
-          "path": "BR-SM1-wetlsp-2021.nc",
-          "size": 14098676,
-          "asset": "BR-SM1--BR-SM1-wetlsp-2021.nc"
-        },
-        {
-          "path": "BR-SM1-wetlsp-2022.nc",
-          "size": 6978917,
-          "asset": "BR-SM1--BR-SM1-wetlsp-2022.nc"
-        },
-        {
-          "path": "BR-SM1-wetlsp-2023.nc",
-          "size": 3527623,
-          "asset": "BR-SM1--BR-SM1-wetlsp-2023.nc"
-        },
-        {
-          "path": "BR-SM1-wetlsp-2024.nc",
-          "size": 11886339,
-          "asset": "BR-SM1--BR-SM1-wetlsp-2024.nc"
-        },
-        {
-          "path": "BR_SM1_pixels_geom.parquet",
-          "size": 147410,
-          "asset": "BR-SM1--BR_SM1_pixels_geom.parquet"
-        },
-        {
-          "path": "BR_SM1_pixels_meta.parquet",
-          "size": 1507,
-          "asset": "BR-SM1--BR_SM1_pixels_meta.parquet"
-        },
-        {
-          "path": "BR_SM1_pixels_timeseries.parquet",
-          "size": 177642484,
-          "asset": "BR-SM1--BR_SM1_pixels_timeseries.parquet"
-        },
-        {
           "path": "README_parquet.json",
-          "size": 6562,
-          "asset": "BR-SM1--README_parquet.json"
+          "size": 11734,
+          "sha256": "0813f9989249c874c4091f18ea346d9ae1b78916cab368dc1c68064303efb4c5",
+          "asset": "US-Myb--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 4130,
-          "asset": "BR-SM1--README_parquet.md"
+          "size": 892,
+          "sha256": "ab47799c588e23a77abd4885ef0fb11c37fe7e15417928d702164b461f98b5fc",
+          "asset": "US-Myb--README_parquet.md"
+        },
+        {
+          "path": "US-Myb-wetlsp-2021.nc",
+          "size": 15444306,
+          "sha256": "16ae62ab5d2da93724c28bc1e678d4e1f1f64b72fbeeabd1abf1c3e7bc4cf14e",
+          "asset": "US-Myb--US-Myb-wetlsp-2021.nc"
+        },
+        {
+          "path": "US-Myb-wetlsp-2022.nc",
+          "size": 14503977,
+          "sha256": "7bbb0b73c2a30b995dad57c2e090492ed11fa171866ba4b199ae86ea9f1e86c7",
+          "asset": "US-Myb--US-Myb-wetlsp-2022.nc"
+        },
+        {
+          "path": "US-Myb-wetlsp-2023.nc",
+          "size": 14072576,
+          "sha256": "ea79d56ee3e9a8a9652deb2e57313861f0889aeae4306c940bd0d6480a581310",
+          "asset": "US-Myb--US-Myb-wetlsp-2023.nc"
+        },
+        {
+          "path": "US-Myb-wetlsp-2024.nc",
+          "size": 13927119,
+          "sha256": "8cc7c5d1617c00e277628c6df3484dbd888f2552b32de1cd0d890006caa333f4",
+          "asset": "US-Myb--US-Myb-wetlsp-2024.nc"
+        },
+        {
+          "path": "US_Myb_pixels_geom.parquet",
+          "size": 309540,
+          "sha256": "e07100e83d6a299dff7470a833110c9c2cd3c725420509db0089a4b0ed871c58",
+          "asset": "US-Myb--US_Myb_pixels_geom.parquet"
+        },
+        {
+          "path": "US_Myb_pixels_meta.parquet",
+          "size": 1490,
+          "sha256": "b2742a86279735ba0fcb05b60252e7d6a43356394b3731d802a80888f8ab5a36",
+          "asset": "US-Myb--US_Myb_pixels_meta.parquet"
+        },
+        {
+          "path": "US_Myb_pixels_timeseries.parquet",
+          "size": 719259345,
+          "sha256": "ff5a57f5b306049ca1bfc6402971266d92c40919c2f3202531c85c63977b0a12",
+          "asset": "US-Myb--US_Myb_pixels_timeseries.parquet"
         }
       ]
     },
     {
-      "siteId": "US-BZF",
-      "name": "Bonanza Creek fen",
-      "description": "Rich fen in interior Alaska",
-      "bytes": 192499610,
+      "siteId": "US-LA2",
+      "name": "Salvador WMA Freshwater Marsh",
+      "description": "Freshwater marsh in coastal Louisiana",
+      "bytes": 647293117,
       "files": [
         {
           "path": "README_parquet.json",
-          "size": 10065,
-          "asset": "US-BZF--README_parquet.json"
+          "size": 11734,
+          "sha256": "650ae0d05b7b4ed4a73f6ca2923ba2ed66e371323524c5dbcc9227af77420be3",
+          "asset": "US-LA2--README_parquet.json"
         },
         {
           "path": "README_parquet.md",
-          "size": 7989,
-          "asset": "US-BZF--README_parquet.md"
+          "size": 892,
+          "sha256": "88ff29d86e689effc58236ba0fa0378f318df948fb6be7ade4564c6425425d3f",
+          "asset": "US-LA2--README_parquet.md"
         },
         {
-          "path": "US-BZF-wetlsp-2021.nc",
-          "size": 4983164,
-          "asset": "US-BZF--US-BZF-wetlsp-2021.nc"
+          "path": "US-LA2-wetlsp-2021.nc",
+          "size": 14470909,
+          "sha256": "3bbe08ddc014e463d22b8c6ff74f8d6d2e6dd8d1dce5117e7d62c7c1835cb2ed",
+          "asset": "US-LA2--US-LA2-wetlsp-2021.nc"
         },
         {
-          "path": "US-BZF-wetlsp-2022.nc",
-          "size": 5379574,
-          "asset": "US-BZF--US-BZF-wetlsp-2022.nc"
+          "path": "US-LA2-wetlsp-2022.nc",
+          "size": 13200463,
+          "sha256": "b03028fdb14edf2ba69f0d4b3abbc0d4d15ec13f8f83091020db3655d2b00b0b",
+          "asset": "US-LA2--US-LA2-wetlsp-2022.nc"
         },
         {
-          "path": "US-BZF-wetlsp-2023.nc",
-          "size": 5138961,
-          "asset": "US-BZF--US-BZF-wetlsp-2023.nc"
+          "path": "US-LA2-wetlsp-2023.nc",
+          "size": 16245805,
+          "sha256": "830a8f894e2535b0dfdc9b0fd07c43895340805498a05752ae5d0c437b2368bc",
+          "asset": "US-LA2--US-LA2-wetlsp-2023.nc"
         },
         {
-          "path": "US-BZF-wetlsp-2024.nc",
-          "size": 1927152,
-          "asset": "US-BZF--US-BZF-wetlsp-2024.nc"
+          "path": "US-LA2-wetlsp-2024.nc",
+          "size": 16736025,
+          "sha256": "5da831e710c8e018a9bb7d8a01791c20d573db533e6461db96ab6280cefdc38d",
+          "asset": "US-LA2--US-LA2-wetlsp-2024.nc"
         },
         {
-          "path": "US_BZF_pixels_geom.parquet",
-          "size": 304806,
-          "asset": "US-BZF--US_BZF_pixels_geom.parquet"
+          "path": "US_LA2_pixels_geom.parquet",
+          "size": 309602,
+          "sha256": "230cbc5b1ce20f5d74ec5421f2fc277366b76b7e36bb6ed857ddc8c9b88f25fc",
+          "asset": "US-LA2--US_LA2_pixels_geom.parquet"
         },
         {
-          "path": "US_BZF_pixels_meta.parquet",
-          "size": 1524,
-          "asset": "US-BZF--US_BZF_pixels_meta.parquet"
+          "path": "US_LA2_pixels_meta.parquet",
+          "size": 1477,
+          "sha256": "a98702a337a2c4058bb884bd5f9806598988e4416285a85feb84ca59b025cf18",
+          "asset": "US-LA2--US_LA2_pixels_meta.parquet"
         },
         {
-          "path": "US_BZF_pixels_timeseries.parquet",
-          "size": 174746375,
-          "asset": "US-BZF--US_BZF_pixels_timeseries.parquet"
-        }
-      ]
-    },
-    {
-      "siteId": "CZ-Wet",
-      "name": "Třeboň wet meadow",
-      "description": "Wet sedge meadow, Czechia",
-      "bytes": 216680535,
-      "files": [
-        {
-          "path": "CZ-Wet-wetlsp-2021.nc",
-          "size": 10165840,
-          "asset": "CZ-Wet--CZ-Wet-wetlsp-2021.nc"
-        },
-        {
-          "path": "CZ-Wet-wetlsp-2022.nc",
-          "size": 10371248,
-          "asset": "CZ-Wet--CZ-Wet-wetlsp-2022.nc"
-        },
-        {
-          "path": "CZ-Wet-wetlsp-2023.nc",
-          "size": 10870429,
-          "asset": "CZ-Wet--CZ-Wet-wetlsp-2023.nc"
-        },
-        {
-          "path": "CZ-Wet-wetlsp-2024.nc",
-          "size": 10390672,
-          "asset": "CZ-Wet--CZ-Wet-wetlsp-2024.nc"
-        },
-        {
-          "path": "CZ_Wet_pixels_geom.parquet",
-          "size": 143036,
-          "asset": "CZ-Wet--CZ_Wet_pixels_geom.parquet"
-        },
-        {
-          "path": "CZ_Wet_pixels_meta.parquet",
-          "size": 1674,
-          "asset": "CZ-Wet--CZ_Wet_pixels_meta.parquet"
-        },
-        {
-          "path": "CZ_Wet_pixels_timeseries.parquet",
-          "size": 174726944,
-          "asset": "CZ-Wet--CZ_Wet_pixels_timeseries.parquet"
-        },
-        {
-          "path": "README_parquet.json",
-          "size": 6562,
-          "asset": "CZ-Wet--README_parquet.json"
-        },
-        {
-          "path": "README_parquet.md",
-          "size": 4130,
-          "asset": "CZ-Wet--README_parquet.md"
+          "path": "US_LA2_pixels_timeseries.parquet",
+          "size": 586316210,
+          "sha256": "5585d3539659e796c519a795e60dfd82ea771972972dc50881d465b0fe305b7e",
+          "asset": "US-LA2--US_LA2_pixels_timeseries.parquet"
         }
       ]
     }
