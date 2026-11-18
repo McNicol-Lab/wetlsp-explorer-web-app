@@ -171,7 +171,7 @@ export function ErrorPanel({
 
 /** Series colours, consistent across every chart in the app. */
 export function seriesColor(series: string, dark: boolean): string {
-  if (series === 'spline') return dark ? '#2dd4bf' : '#0f766e';
+  if (series === 'spline') return dark ? '#4fd1a5' : '#147d64';
   if (series === 'raw') return dark ? '#fb923c' : '#ea580c';
   // Anything unexpected gets a neutral so it never masquerades as a known series.
   return dark ? '#94a3b8' : '#64748b';

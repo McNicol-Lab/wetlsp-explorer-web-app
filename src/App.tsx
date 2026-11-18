@@ -5,11 +5,10 @@ import { LeftRail } from '@/components/LeftRail';
 import { TopBar, VIEWS } from '@/components/TopBar';
 import { Hero } from '@/components/Hero';
 import { Toasts } from '@/components/Toasts';
-import { Onboarding } from '@/components/Onboarding';
 import { CommandPalette } from '@/components/CommandPalette';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { DropOverlay, useGlobalDrop } from '@/components/DropTarget';
-import { ProgressBar } from '@/components/ui';
+import { BootLoader } from '@/components/BootLoader';
 import { SpaceDialog } from '@/components/StoragePanel';
 import { runFigureAction } from '@/lib/figure';
 import { ImportProgress } from '@/components/ImportProgress';
@@ -113,19 +112,23 @@ export default function App() {
                 <ImportProgress inline />
               </div>
             )}
-            <Onboarding />
-            <main className="flex min-h-0 flex-1">
-              <div className="min-w-0 flex-1 p-4 panel-transition">
+            <main className="relative flex min-h-0 flex-1">
+              <div className="min-w-0 flex-1 p-3 panel-transition">
                 <Canvas />
               </div>
               <aside
+                aria-label="Details"
                 className={clsx(
-                  'workspace-inspector shrink-0 overflow-y-auto border-l border-[var(--border)] bg-[var(--bg-elevated)] transition-[width,opacity] duration-200 ease-[var(--ease-calm)]',
-                  inspectorCollapsed ? 'w-0 opacity-0' : view === 'overview' ? 'w-[360px] opacity-100' : 'w-[300px] opacity-100',
+                  'workspace-inspector shrink-0 overflow-y-auto overflow-x-hidden border-l border-[var(--border)] bg-[var(--bg-elevated)]',
+                  'transition-[width,opacity] duration-150 ease-[var(--ease-calm)]',
+                  // Narrow windows: the inspector overlays the canvas instead of squeezing the chart.
+                  'max-[1199px]:absolute max-[1199px]:inset-y-0 max-[1199px]:right-0 max-[1199px]:z-30 max-[1199px]:shadow-[var(--shadow-sheet)]',
+                  inspectorCollapsed ? 'w-0 border-l-0 opacity-0' : 'w-[312px] opacity-100',
                 )}
                 aria-hidden={inspectorCollapsed}
+                {...(inspectorCollapsed ? { inert: '' } : {})}
               >
-                <div className={clsx(view === 'overview' ? 'w-[359px]' : 'w-[299px]', 'px-1 pb-4')}>
+                <div className="w-[311px] px-1 pb-4">
                   <Inspector />
                 </div>
               </aside>
@@ -135,10 +138,8 @@ export default function App() {
       )}
 
       {!booted && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-[var(--bg)]">
-          <div className="w-[220px]">
-            <ProgressBar fraction={null} label="Starting WetLSP Explorer" />
-          </div>
+        <div className="boot-screen fixed inset-0 z-[80] grid place-items-center bg-[var(--bg)]">
+          <BootLoader />
         </div>
       )}
 

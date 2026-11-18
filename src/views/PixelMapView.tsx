@@ -10,9 +10,10 @@ import { HexagonLayer } from '@deck.gl/aggregation-layers';
 import type { Layer, PickingInfo } from '@deck.gl/core';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import {
-  Crosshair, Eraser, LassoSelect, MapPin, MousePointer2, Send, Shapes, Shuffle, Square, Upload,
+  Eraser, LassoSelect, MapPin, MousePointer2, Send, Shapes, Shuffle, Square, Upload,
 } from 'lucide-react';
 import { MapCanvas, type MapCanvasHandle } from '@/components/MapCanvas';
+import { MetricBubble } from '@/components/viz/MetricBubble';
 import { Button, Card, Chip, EmptyState, Field, Segmented, Slider } from '@/components/ui';
 import { Sparkline } from '@/components/Sparkline';
 import { useActiveSite, useAppStore, useOverlay, useRegions } from '@/store/useAppStore';
@@ -107,6 +108,32 @@ export function PixelMapView() {
     [geometry],
   );
 
+  const focusedPixel = useAppStore((s) => s.focusedPixel);
+  // Sorted site means, for the selected pixel's percentile.
+  const sortedMeans = useMemo(() => {
+    const m = means.data;
+    if (!m || m.size === 0) return null;
+    return Float64Array.from(m.values()).sort();
+  }, [means.data]);
+  const bubble = useMemo(() => {
+    if (focusedPixel === null || !geometry || !means.data) return null;
+    const i = pixelIndex(geometry.pixelId, focusedPixel);
+    const v = means.data.get(focusedPixel);
+    if (i < 0 || v === undefined || !Number.isFinite(v)) return null;
+    let pct: number | null = null;
+    if (sortedMeans && sortedMeans.length > 1) {
+      let lo = 0;
+      let hi = sortedMeans.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (sortedMeans[mid] <= v) lo = mid + 1;
+        else hi = mid;
+      }
+      pct = (lo / sortedMeans.length) * 100;
+    }
+    return { lon: geometry.lon[i], lat: geometry.lat[i], value: v, pct };
+  }, [focusedPixel, geometry, means.data, sortedMeans]);
+
   const meanRange = useMemo(() => {
     const m = means.data;
     if (!m || m.size === 0) return null;
@@ -130,7 +157,7 @@ export function PixelMapView() {
     const under = [...(overlayLayer ? [overlayLayer] : []), ...regionStack.slice(0, 1)];
     const over = regionStack.slice(1);
     const n = geometry.pixelId.length;
-    const accent: [number, number, number] = dark ? [45, 212, 191] : [15, 118, 110];
+    const accent: [number, number, number] = dark ? [79, 209, 165] : [20, 125, 100];
     const secondary: [number, number, number] = dark ? [251, 146, 60] : [234, 88, 12];
 
     if (mode3d) {
@@ -389,13 +416,25 @@ export function PixelMapView() {
       className="relative h-full w-full card overflow-hidden"
     >
       <DrawOverlay tool={tool} map={map} onShape={finishShape} />
+      {bubble && colorByEvi && !mode3d && (
+        <MetricBubble
+          key={focusedPixel}
+          map={map}
+          lon={bubble.lon}
+          lat={bubble.lat}
+          label={`Mean ${ts.series[0] ?? 'spline'} EVI ${ts.year}`}
+          value={bubble.value}
+          percentile={bubble.pct}
+          onClose={() => setFocusedPixel(null)}
+        />
+      )}
       {importDialog}
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
         <div className="pointer-events-auto flex items-center gap-1.5 rounded-[12px] border border-[var(--border)] bg-[var(--bg-elevated)] p-1 shadow-[var(--shadow-card)]">
-          <ToolButton icon={MousePointer2} label="Click pixels" active={tool === 'point'} onClick={() => setTool('point')} />
-          <ToolButton icon={Square} label="Rectangle" active={tool === 'rect'} onClick={() => setTool('rect')} />
-          <ToolButton icon={LassoSelect} label="Lasso" active={tool === 'lasso'} onClick={() => setTool('lasso')} />
+          <ToolButton icon={MousePointer2} label="Click pixels" hint="Click pixels: each click toggles one pixel in or out" active={tool === 'point'} onClick={() => setTool('point')} />
+          <ToolButton icon={Square} label="Rectangle" hint="Rectangle: drag to take every pixel inside (a random sample above the sample size)" active={tool === 'rect'} onClick={() => setTool('rect')} />
+          <ToolButton icon={LassoSelect} label="Lasso" hint="Lasso: draw an irregular shape; release to apply" active={tool === 'lasso'} onClick={() => setTool('lasso')} />
           <div className="mx-0.5 h-5 w-px bg-[var(--border)]" />
           <Segmented<ShapeTarget>
             size="sm"
@@ -412,6 +451,7 @@ export function PixelMapView() {
           <ToolButton
             icon={Upload}
             label={importBusy ?? 'Import a shapefile (regions) or a GeoTIFF / NetCDF (overlay)'}
+            hint={importBusy ?? 'Import a shapefile: its polygons become regions (a pixel counts when its centre is inside). Or a GeoTIFF / NetCDF to lay under the pixels.'}
             onClick={pickMapLayerFiles}
           />
           <div className="mx-0.5 h-5 w-px bg-[var(--border)]" />
@@ -468,7 +508,7 @@ export function PixelMapView() {
           </Chip>
         )}
         {selection.length > 0 && (
-          <Chip tone="accent">
+          <Chip tone="accent" className="bg-[var(--bg-elevated)]">
             <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
             {formatCount(selection.length)} selected
           </Chip>
@@ -508,18 +548,21 @@ export function PixelMapView() {
 function ToolButton({
   icon: Icon,
   label,
+  hint,
   active,
   onClick,
 }: {
   icon: typeof Square;
   label: string;
+  /** Longer tooltip; the accessible name stays `label`. */
+  hint?: string;
   active?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      title={label}
+      title={hint ?? label}
       aria-label={label}
       aria-pressed={active}
       className={
@@ -704,6 +747,53 @@ export function PixelMapInspector() {
 
   return (
     <div className="space-y-3">
+      {focused !== null && (
+      <Card
+        title={`Pixel ${focused}`}
+        actions={
+          <Button size="sm" variant="ghost" onClick={() => setView('timeseries')} title="Open the full time series">
+            Time series →
+          </Button>
+        }
+      >
+        {(
+          <div className="space-y-2">
+            <PixelFacts geometry={site.geometry} pixelId={focused} />
+            {trace.loading && <div className="skeleton h-[46px] w-full" />}
+            {trace.data && trace.data.rows > 1 && (
+              <>
+                {trace.data.seriesNames.map((name, idx) => {
+                  const xs: number[] = [];
+                  const ys: number[] = [];
+                  for (let i = 0; i < trace.data!.rows; i++) {
+                    if (trace.data!.seriesIdx[i] !== idx) continue;
+                    xs.push(trace.data!.time[i]);
+                    ys.push(trace.data!.evi[i]);
+                  }
+                  return (
+                    <div key={name}>
+                      <div className="flex items-baseline justify-between text-[11px] text-[var(--text-muted)]">
+                        <span>{name}</span>
+                        <span className="tabular-nums">
+                          {xs.length ? `${isoFromMs(xs[0])} → ${isoFromMs(xs[xs.length - 1])}` : ''}
+                        </span>
+                      </div>
+                      <Sparkline x={xs} y={ys} color={seriesColor(name, dark)} />
+                    </div>
+                  );
+                })}
+              </>
+            )}
+            {trace.data && trace.data.rows <= 1 && !trace.loading && (
+              <p className="text-[12px] text-[var(--text-muted)]">
+                No {ts.series.join('/')} values for this pixel in {ts.year}.
+              </p>
+            )}
+          </div>
+        )}
+      </Card>
+      )}
+
       <Card
         title="Selection"
         subtitle={
@@ -721,6 +811,7 @@ export function PixelMapInspector() {
       >
         <div className="space-y-3">
           <Field label="Sample size" hint={formatCount(cap)}>
+            <div title="A rectangle or lasso around more pixels than this takes a random sample of them.">
             <Slider
               min={25}
               max={MAX_PIXEL_SAMPLE}
@@ -728,9 +819,7 @@ export function PixelMapInspector() {
               value={cap}
               onChange={(v) => setCapDraft(v)}
             />
-            <p className="pt-1 text-[11px] leading-snug text-[var(--text-faint)]">
-              A rectangle or lasso around more pixels than this takes a random sample of them.
-            </p>
+            </div>
             {capDraft !== null && capDraft !== selectionCap && (
               <Button
                 size="sm"
@@ -801,73 +890,6 @@ export function PixelMapInspector() {
       <RegionsCard />
       <OverlayCard />
 
-      <Card title={focused === null ? 'Pixel detail' : `Pixel ${focused}`}>
-        {focused === null ? (
-          <p className="text-[12.5px] leading-snug text-[var(--text-muted)]">
-            Click a single pixel on the map to see where it sits and how its EVI moved through the
-            year.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            <PixelFacts geometry={site.geometry} pixelId={focused} />
-            {trace.loading && <div className="skeleton h-[46px] w-full" />}
-            {trace.data && trace.data.rows > 1 && (
-              <>
-                {trace.data.seriesNames.map((name, idx) => {
-                  const xs: number[] = [];
-                  const ys: number[] = [];
-                  for (let i = 0; i < trace.data!.rows; i++) {
-                    if (trace.data!.seriesIdx[i] !== idx) continue;
-                    xs.push(trace.data!.time[i]);
-                    ys.push(trace.data!.evi[i]);
-                  }
-                  return (
-                    <div key={name}>
-                      <div className="flex items-baseline justify-between text-[11px] text-[var(--text-muted)]">
-                        <span>{name}</span>
-                        <span className="tabular-nums">
-                          {xs.length ? `${isoFromMs(xs[0])} → ${isoFromMs(xs[xs.length - 1])}` : ''}
-                        </span>
-                      </div>
-                      <Sparkline x={xs} y={ys} color={seriesColor(name, dark)} />
-                    </div>
-                  );
-                })}
-              </>
-            )}
-            {trace.data && trace.data.rows <= 1 && !trace.loading && (
-              <p className="text-[12px] text-[var(--text-muted)]">
-                No {ts.series.join('/')} values for this pixel in {ts.year}.
-              </p>
-            )}
-          </div>
-        )}
-      </Card>
-
-      <Card title="Tools">
-        <ul className="space-y-1.5 text-[12px] leading-snug text-[var(--text-muted)]">
-          <li>
-            <Crosshair size={11} className="mr-1 inline" /> Click toggles one pixel in and out.
-          </li>
-          <li>
-            <Square size={11} className="mr-1 inline" /> Drag a rectangle to take everything inside,
-            or a random sample when it holds more than the sample size.
-          </li>
-          <li>
-            <LassoSelect size={11} className="mr-1 inline" /> Lasso for irregular shapes; release to
-            apply.
-          </li>
-          <li>
-            <Shapes size={11} className="mr-1 inline" /> With <b>Add region</b> on, each rectangle or
-            lasso becomes a new region instead, and Compare plots every region in Time Series.
-          </li>
-          <li>
-            <Upload size={11} className="mr-1 inline" /> Import a shapefile to turn its polygons into
-            regions (a pixel counts when its centre is inside), or a GeoTIFF / NetCDF to lay under the
-            pixels.
-          </li>
-        </ul>
-      </Card>
     </div>
   );
 }

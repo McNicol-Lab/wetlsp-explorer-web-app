@@ -64,8 +64,9 @@ export function FigureMenu({
         onClick={() => void runFigureAction('save', actions)}
         disabled={disabled}
         title="Save as PNG (⌘S)"
+        aria-label="PNG"
       >
-        PNG
+        <span className="hidden min-[1440px]:inline">PNG</span>
       </Button>
       <Button
         size="sm"
@@ -73,8 +74,9 @@ export function FigureMenu({
         onClick={() => void runFigureAction('copy', actions)}
         disabled={disabled}
         title="Copy the image to the clipboard (⌘⇧C)"
+        aria-label="Copy"
       >
-        Copy
+        <span className="hidden min-[1440px]:inline">Copy</span>
       </Button>
       {allItems.length > 0 && (
         <Button

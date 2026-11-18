@@ -1,6 +1,6 @@
 /**
- * Left rail: identity, the import action, the loaded-site list, the active
- * site's parsed files, and Settings, in that order from top to bottom.
+ * Sidebar: workspace navigation, the loaded datasets, and utilities. The only
+ * place views are switched from with the mouse (the header shows context).
  */
 import { useState } from 'react';
 import clsx from 'clsx';
@@ -8,89 +8,137 @@ import {
   AlertTriangle,
   Check,
   ChevronLeft,
-  ChevronRight,
-  Database,
-  FileBox,
-  Grid2x2,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
+  Search,
   Settings as SettingsIcon,
+  Sun,
   Trash2,
   Waves,
 } from 'lucide-react';
 import { useAppStore, type SiteState } from '@/store/useAppStore';
 import { useImportActions } from './DropTarget';
-import { Button, Chip, Divider } from './ui';
-import { formatBytes, relativeTime } from '@/lib/format';
+import { VIEWS } from './TopBar';
+import { formatBytes } from '@/lib/format';
+import { useDark } from '@/views/shared';
+
+const SEARCH_ABOVE = 5;
 
 export function LeftRail({ onOpenSettings }: { onOpenSettings: () => void }) {
   const collapsed = useAppStore((s) => s.railCollapsed);
   const toggle = useAppStore((s) => s.toggleRail);
+  const view = useAppStore((s) => s.view);
+  const setView = useAppStore((s) => s.setView);
   const siteOrder = useAppStore((s) => s.siteOrder);
   const sites = useAppStore((s) => s.sites);
   const activeSiteId = useAppStore((s) => s.activeSiteId);
   const selectSite = useAppStore((s) => s.selectSite);
+  const setTheme = useAppStore((s) => s.setTheme);
+  const dark = useDark();
   const { openFolder } = useImportActions();
+  const [query, setQuery] = useState('');
 
-  const active = activeSiteId ? sites[activeSiteId] : null;
+  const q = query.trim().toLowerCase();
+  const shown = q ? siteOrder.filter((id) => id.toLowerCase().includes(q)) : siteOrder;
 
   return (
     <aside
+      aria-label="Sidebar"
       className={clsx(
         'relative flex shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-sidebar)]',
-        'transition-[width] duration-200 ease-[var(--ease-calm)]',
-        collapsed ? 'w-[56px]' : 'w-[236px]',
+        'transition-[width] duration-150 ease-[var(--ease-calm)]',
+        collapsed ? 'w-[56px]' : 'w-[228px]',
       )}
     >
-      <div className={clsx('flex items-center gap-2.5', collapsed ? 'flex-col px-2 py-4' : 'h-[88px] px-4')}>
-        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[var(--accent)] text-[var(--accent-contrast)]">
-          <Waves size={19} strokeWidth={1.6} />
-        </div>
+      {/* Identity + collapse */}
+      <div className={clsx('flex h-12 shrink-0 items-center gap-2', collapsed ? 'justify-center px-2' : 'px-3')}>
         {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[16px] font-semibold leading-tight tracking-[-0.035em]">WetLSP</div>
-            <div className="mt-0.5 truncate text-[11px] tracking-[0.06em] text-[var(--text-muted)]">
-              EXPLORER
+          <>
+            <div className="grid h-6 w-6 shrink-0 place-items-center rounded-[6px] bg-[var(--accent)] text-[var(--accent-contrast)]">
+              <Waves size={14} strokeWidth={1.8} />
             </div>
-          </div>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.01em]">WetLSP Explorer</span>
+          </>
         )}
         <button
           onClick={toggle}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={clsx('shrink-0 rounded-md p-1 text-[var(--text-faint)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]', !collapsed && 'ml-auto')}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--text-faint)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
         >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
         </button>
       </div>
 
-      <div className={collapsed ? 'px-2 pb-4' : 'px-4 pb-5'}>
-        <Button
-          variant="secondary"
-          size={collapsed ? 'sm' : 'md'}
-          className={collapsed ? 'w-full px-0' : 'w-full'}
-          icon={<Plus size={15} />}
-          onClick={openFolder}
-          title="Open a WetLSP site folder"
-        >
-          {!collapsed && 'Open dataset'}
-        </Button>
-      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3">
+        {/* Workspace */}
+        <nav aria-label="Views" className="space-y-px pt-1">
+          {VIEWS.map((v, i) => (
+            <NavItem
+              key={v.id}
+              collapsed={collapsed}
+              active={view === v.id}
+              icon={<v.icon size={15} strokeWidth={1.8} />}
+              label={v.label}
+              hint={`⌘${i + 1}`}
+              onClick={() => setView(v.id)}
+            />
+          ))}
+        </nav>
 
-      <Divider />
+        {/* Datasets */}
+        <SectionLabel collapsed={collapsed} action={
+          <button
+            onClick={openFolder}
+            aria-label="Import a dataset folder"
+            title="Import a dataset folder"
+            className="grid h-5 w-5 place-items-center rounded text-[var(--text-faint)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
+          >
+            <Plus size={13} />
+          </button>
+        }>
+          Datasets
+        </SectionLabel>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-5">
-        {!collapsed && (
-          <h4 className="flex items-center justify-between px-1 pb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">
-            <span>Loaded sites</span>
-            <span className="font-mono text-[10px]">{siteOrder.length.toString().padStart(2, '0')}</span>
-          </h4>
+        {collapsed ? (
+          <button
+            onClick={openFolder}
+            aria-label="Import a dataset folder"
+            title="Import a dataset folder"
+            className="mb-1 grid h-8 w-full place-items-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
+          >
+            <Plus size={15} />
+          </button>
+        ) : (
+          siteOrder.length > SEARCH_ABOVE && (
+            <label className="mb-1 flex h-7 items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 text-[12px] text-[var(--text-muted)] focus-within:border-[var(--border-strong)]">
+              <Search size={12} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter sites"
+                aria-label="Filter loaded sites"
+                className="min-w-0 flex-1 bg-transparent text-[var(--text)] outline-none placeholder:text-[var(--text-faint)]"
+              />
+            </label>
+          )
         )}
+
         {siteOrder.length === 0 && !collapsed && (
-          <p className="px-1 py-2 text-[12px] leading-snug text-[var(--text-muted)]">
-            No datasets yet. Drop a site folder anywhere on the window.
-          </p>
+          <button
+            onClick={openFolder}
+            className="w-full rounded-md px-2 py-1.5 text-left text-[12px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
+          >
+            No datasets loaded. <span className="text-[var(--accent)]">Import…</span>
+          </button>
         )}
-        <ul className="space-y-0.5">
-          {siteOrder.map((id) => (
+        {q && shown.length === 0 && (
+          <p className="px-2 py-1.5 text-[12px] text-[var(--text-faint)]">No match.</p>
+        )}
+        <ul className="space-y-px">
+          {shown.map((id) => (
             <SiteRow
               key={id}
               state={sites[id]}
@@ -100,32 +148,97 @@ export function LeftRail({ onOpenSettings }: { onOpenSettings: () => void }) {
             />
           ))}
         </ul>
-
-        {!collapsed && active && (
-          <>
-            <h4 className="mt-6 border-t border-[var(--border)] px-1 pt-5 pb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              Dataset files
-            </h4>
-            <FileChips state={active} />
-          </>
-        )}
       </div>
 
-      <Divider />
-      <div className="p-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          className={collapsed ? 'w-full px-0' : 'w-full justify-start'}
-          icon={<SettingsIcon size={14} />}
+      {/* Utilities */}
+      <div className="shrink-0 space-y-px border-t border-[var(--border)] p-2">
+        <NavItem
+          collapsed={collapsed}
+          icon={dark ? <Sun size={15} strokeWidth={1.8} /> : <Moon size={15} strokeWidth={1.8} />}
+          label={dark ? 'Light theme' : 'Dark theme'}
+          onClick={() => setTheme(dark ? 'light' : 'dark')}
+        />
+        <NavItem
+          collapsed={collapsed}
+          icon={<SettingsIcon size={15} strokeWidth={1.8} />}
+          label="Settings"
           onClick={onOpenSettings}
-          aria-label="Settings"
-        >
-          {!collapsed && 'Settings'}
-        </Button>
+        />
       </div>
     </aside>
   );
+}
+
+function SectionLabel({ collapsed, children, action }: { collapsed: boolean; children: string; action?: React.ReactNode }) {
+  if (collapsed) return <div className="mx-2 my-3 border-t border-[var(--border)]" />;
+  return (
+    <div className="flex items-center justify-between px-2 pb-1 pt-5 text-[11px] font-medium text-[var(--text-faint)]">
+      <span>{children}</span>
+      {action}
+    </div>
+  );
+}
+
+function NavItem({
+  collapsed,
+  active,
+  icon,
+  label,
+  hint,
+  onClick,
+}: {
+  collapsed: boolean;
+  active?: boolean;
+  icon: React.ReactNode;
+  label: string;
+  hint?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      aria-current={active ? 'page' : undefined}
+      title={collapsed ? `${label}${hint ? `  ${hint}` : ''}` : undefined}
+      className={clsx(
+        'group flex h-8 w-full items-center gap-2.5 rounded-md text-[13px] transition-colors duration-150',
+        collapsed ? 'justify-center' : 'px-2',
+        active
+          ? 'bg-[var(--bg-active)] font-medium text-[var(--text)]'
+          : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]',
+      )}
+    >
+      <span className={clsx('shrink-0', active && 'text-[var(--accent)]')}>{icon}</span>
+      {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
+      {!collapsed && hint && (
+        <span className="text-[10.5px] tabular-nums text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-100">
+          {hint}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** One line of file status: the site is usable only as far as its files allow. */
+function fileStatus(state: SiteState): { ok: boolean; text: string; detail: string } {
+  const m = state.manifest;
+  const missing = [
+    !m.geom && 'geometry',
+    !m.meta && 'metadata',
+    !m.timeseries && 'time series',
+    m.netcdf.length === 0 && 'NetCDF',
+  ].filter(Boolean) as string[];
+  const years = m.netcdf.map((n) => n.year).sort((a, b) => a - b);
+  const span = years.length ? (years.length === 1 ? `${years[0]}` : `${years[0]}–${years[years.length - 1]}`) : '';
+  const detail = [
+    `geometry ${m.geom ? '✓' : 'missing'}`,
+    `metadata ${m.meta ? '✓' : 'missing'}`,
+    `time series ${m.timeseries ? `✓ ${formatBytes(m.timeseries.totalBytes)}` : 'missing'}`,
+    `NetCDF ${m.netcdf.length ? years.join(', ') : 'none'}`,
+  ].join('\n');
+  if (state.status === 'error') return { ok: false, text: 'Failed to open', detail: state.error ?? detail };
+  if (missing.length) return { ok: false, text: `No ${missing.join(', ')}`, detail };
+  return { ok: true, text: [span, formatBytes(state.bytesOnDisk)].filter(Boolean).join(' · '), detail };
 }
 
 function SiteRow({
@@ -142,21 +255,35 @@ function SiteRow({
   const removeSite = useAppStore((s) => s.removeSite);
   const [confirming, setConfirming] = useState(false);
   const { manifest } = state;
+  const status = fileStatus(state);
+  const dot = clsx(
+    'h-1.5 w-1.5 shrink-0 rounded-full',
+    state.status === 'error'
+      ? 'bg-red-500'
+      : state.status === 'loading'
+        ? 'animate-pulse bg-amber-400'
+        : !status.ok
+          ? 'bg-amber-500'
+          : state.status === 'ready'
+            ? 'bg-[var(--accent)]'
+            : 'bg-[var(--border-strong)]',
+  );
 
   if (collapsed) {
     return (
       <li>
         <button
           onClick={onSelect}
-          title={manifest.siteId}
+          title={`${manifest.siteId}\n${status.detail}`}
+          aria-label={manifest.siteId}
+          aria-current={active ? 'true' : undefined}
           className={clsx(
-            'grid h-9 w-full place-items-center rounded-md text-[11px] font-semibold transition-colors',
-            active
-              ? 'bg-[color-mix(in_oklab,var(--accent)_16%,transparent)] text-[var(--accent)]'
-              : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)]',
+            'relative grid h-8 w-full place-items-center rounded-md text-[10.5px] font-semibold transition-colors',
+            active ? 'bg-[var(--bg-active)] text-[var(--text)]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)]',
           )}
         >
           {manifest.siteId.slice(0, 2).toUpperCase()}
+          <span className={clsx(dot, 'absolute right-1.5 top-1.5')} />
         </button>
       </li>
     );
@@ -166,33 +293,30 @@ function SiteRow({
     <li>
       <div
         className={clsx(
-          'group flex items-center gap-2 rounded-md border px-2.5 py-3 transition-colors',
-          active ? 'border-[var(--border)] bg-[var(--bg-elevated)]' : 'border-transparent hover:bg-[var(--bg-hover)]',
+          'group flex items-center gap-1 rounded-md pr-1 transition-colors',
+          active ? 'bg-[var(--bg-active)]' : 'hover:bg-[var(--bg-hover)]',
         )}
       >
-        <button onClick={onSelect} className="min-w-0 flex-1 text-left" aria-current={active ? 'true' : undefined}>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={clsx(
-                'h-1.5 w-1.5 shrink-0 rounded-full',
-                state.status === 'ready'
-                  ? 'bg-[var(--accent)]'
-                  : state.status === 'error'
-                    ? 'bg-red-500'
-                    : state.status === 'loading'
-                      ? 'animate-pulse bg-amber-400'
-                      : 'bg-[var(--border-strong)]',
-              )}
-            />
-            <span className="truncate text-[13px] font-medium">{manifest.siteId}</span>
-          </div>
-          <div className="mt-1 truncate text-[11px] text-[var(--text-muted)]">
-            {formatBytes(state.bytesOnDisk)} · {relativeTime(manifest.importedAt)}
-          </div>
+        <button
+          onClick={onSelect}
+          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 text-left"
+          aria-current={active ? 'true' : undefined}
+          title={status.detail}
+        >
+          <span className={dot} />
+          <span className="min-w-0 flex-1">
+            <span className={clsx('block truncate text-[13px]', active ? 'font-medium' : 'text-[var(--text-muted)]')}>
+              {manifest.siteId}
+            </span>
+            <span className={clsx('flex items-center gap-1 truncate text-[11px] tabular-nums', status.ok ? 'text-[var(--text-faint)]' : 'text-amber-600 dark:text-amber-400')}>
+              {!status.ok && <AlertTriangle size={10} />}
+              {status.text}
+            </span>
+          </span>
         </button>
 
         {confirming ? (
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center">
             <button
               onClick={() => {
                 setConfirming(false);
@@ -200,6 +324,7 @@ function SiteRow({
               }}
               className="rounded p-1 text-red-500 hover:bg-red-500/10"
               title="Delete permanently"
+              aria-label={`Delete ${manifest.siteId} permanently`}
             >
               <Check size={13} />
             </button>
@@ -207,6 +332,7 @@ function SiteRow({
               onClick={() => setConfirming(false)}
               className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--bg-hover)]"
               title="Keep"
+              aria-label="Keep"
             >
               <ChevronLeft size={13} />
             </button>
@@ -216,74 +342,12 @@ function SiteRow({
             onClick={() => setConfirming(true)}
             className="shrink-0 rounded p-1 text-[var(--text-faint)] opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100 focus-visible:opacity-100"
             title={`Remove ${manifest.siteId} from offline storage`}
+            aria-label={`Remove ${manifest.siteId}`}
           >
             <Trash2 size={13} />
           </button>
         )}
       </div>
     </li>
-  );
-}
-
-function FileChips({ state }: { state: SiteState }) {
-  const { manifest } = state;
-  const rows: Array<{ ok: boolean; icon: typeof Database; label: string; title: string }> = [
-    {
-      ok: Boolean(manifest.geom),
-      icon: Grid2x2,
-      label: 'geom',
-      title: manifest.geom
-        ? `${manifest.geom.parts.length} file(s) · ${formatBytes(manifest.geom.totalBytes)}`
-        : 'pixels_geom is missing, so pixels cannot be mapped',
-    },
-    {
-      ok: Boolean(manifest.meta),
-      icon: FileBox,
-      label: 'meta',
-      title: manifest.meta
-        ? `${manifest.meta.parts.length} file(s) · CRS and site metadata`
-        : 'pixels_meta is missing, so there is no CRS',
-    },
-    {
-      ok: Boolean(manifest.timeseries),
-      icon: Database,
-      label: 'timeseries',
-      title: manifest.timeseries
-        ? `${manifest.timeseries.parts.length} file(s) · ${formatBytes(manifest.timeseries.totalBytes)}`
-        : 'pixels_timeseries is missing, so there is no EVI series',
-    },
-  ];
-
-  return (
-    <div className="space-y-1.5 px-1">
-      <div className="flex flex-wrap gap-1.5">
-        {rows.map((r) => (
-          <Chip key={r.label} tone={r.ok ? 'accent' : 'warning'} title={r.title}>
-            {r.ok ? <Check size={11} /> : <AlertTriangle size={11} />}
-            {r.label}
-          </Chip>
-        ))}
-        <Chip
-          tone={manifest.netcdf.length ? 'accent' : 'warning'}
-          title={
-            manifest.netcdf.length
-              ? manifest.netcdf.map((n) => n.year).join(', ')
-              : 'No WetLSP NetCDF files found'
-          }
-        >
-          {manifest.netcdf.length ? <Check size={11} /> : <AlertTriangle size={11} />}
-          {manifest.netcdf.length}× NetCDF
-        </Chip>
-      </div>
-      <div className="pt-1 text-[11px] text-[var(--text-faint)]">
-        {manifest.layout === 'batched'
-          ? 'Batched `_ds` layout'
-          : manifest.layout === 'mixed'
-            ? 'Mixed layout'
-            : 'Single-file layout'}
-        {manifest.netcdf.length > 0 &&
-          ` · ${manifest.netcdf[0].year}–${manifest.netcdf[manifest.netcdf.length - 1].year}`}
-      </div>
-    </div>
   );
 }

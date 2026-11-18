@@ -555,7 +555,7 @@ export function RegionsCard() {
   return (
     <Card
       title="Regions"
-      subtitle={regions.length ? `${regions.length} region${regions.length === 1 ? '' : 's'} · ${enabled.length} compared` : 'Compare areas side by side'}
+      subtitle={regions.length ? `${regions.length} region${regions.length === 1 ? '' : 's'} · ${enabled.length} compared` : undefined}
       actions={
         regions.length > 0 ? (
           <Button size="sm" variant="ghost" onClick={clearRegions}>
@@ -566,8 +566,8 @@ export function RegionsCard() {
     >
       <div className="space-y-2.5">
         {regions.length === 0 && (
-          <p className="text-[12px] leading-snug text-[var(--text-muted)]">
-            Switch shapes to <b>Add region</b> on the map toolbar and drag boxes or lassos, or import a shapefile such as an NWI wetlands layer.
+          <p className="text-[12px] text-[var(--text-muted)]" title="Switch the map toolbar to Add region and drag boxes or lassos, or import a shapefile such as an NWI wetlands layer.">
+            No regions yet. Use <b className="font-medium">Add region</b> on the map.
           </p>
         )}
         {regions.length > 0 && (
@@ -674,11 +674,8 @@ export function OverlayCard() {
 
   if (!overlay) {
     return (
-      <Card title="Raster overlay" subtitle="GeoTIFF or NetCDF">
-        <p className="mb-2 text-[12px] leading-snug text-[var(--text-muted)]">
-          Lay a land-cover, elevation or flooding grid under the pixels. The file is read on this computer and not stored.
-        </p>
-        <Button size="sm" className="w-full" icon={<Layers size={13} />} onClick={onImport} disabled={Boolean(busy)}>
+      <Card title="Raster overlay" subtitle="GeoTIFF or NetCDF under the pixels">
+        <Button size="sm" className="w-full" icon={<Layers size={13} />} onClick={onImport} disabled={Boolean(busy)} title="Lay a land-cover, elevation or flooding grid under the pixels. The file is read on this computer and not stored.">
           Import raster
         </Button>
       </Card>

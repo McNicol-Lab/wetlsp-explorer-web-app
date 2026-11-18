@@ -17,6 +17,7 @@ import { Raster3D, type Raster3DHandle } from '@/components/Raster3D';
 import { Button, Card, Chip, EmptyState, Field, Segmented, Slider, Toggle } from '@/components/ui';
 import { useActiveSite, useAppStore } from '@/store/useAppStore';
 import { ErrorPanel, LoadingPanel, useAsyncData, useBasemap, useDark } from './shared';
+import { PhenoSeason } from './PhenoSeason';
 import { DEFAULT_CELL_BUDGET, getNetcdfInfo, intersectLayers, readRaster } from '@/engine/netcdf';
 import { makeColorScale, rampToCssGradient, type ColorScale } from '@/lib/colorscales';
 import { rasterDomain, rasterToCanvas } from '@/lib/raster';
@@ -25,7 +26,7 @@ import { doyToDateLabel, formatCount, formatValue } from '@/lib/format';
 import { downloadBlob, exportBackground, figureCard, timestampedName } from '@/lib/export';
 import type { NetcdfInfo, RasterSlice } from '@/lib/types';
 
-type Mode = 'figure' | 'map' | 'relief';
+type Mode = 'season' | 'figure' | 'map' | 'relief';
 
 interface PanelData {
   siteId: string;
@@ -42,7 +43,7 @@ export function PhenometricsView() {
   const update = useAppStore((s) => s.updatePhenometrics);
   const dark = useDark();
   const basemap = useBasemap();
-  const [mode, setMode] = useState<Mode>('figure');
+  const [mode, setMode] = useState<Mode>('season');
   const [view, setView] = useState<FigureView>(IDENTITY_VIEW);
   const [probe, setProbe] = useState<(Probe & { panel: number }) | null>(null);
   const figureRefs = useRef<Array<RasterFigureHandle | null>>([]);
@@ -254,24 +255,25 @@ export function PhenometricsView() {
             value={mode}
             onChange={setMode}
             options={[
+              { value: 'season', label: 'Season', title: 'Every year of the active site: seasonal profile, ring and distributions' },
               { value: 'figure', label: 'Figure', title: 'Equal-aspect axes in projected metres' },
               { value: 'map', label: 'Map', title: 'Georeferenced over a basemap' },
               { value: 'relief', label: '3D relief', title: 'Extruded surface with orbit controls' },
             ]}
           />
-          {displayedLayer && (
+          {displayedLayer && mode !== 'season' && (
             <Chip tone="accent" title={layerInfo(displayedLayer).description}>
               {displayedLayer}
             </Chip>
           )}
-          {rasters.data?.[0]?.slice && rasters.data[0].slice.downsample > 1 && (
+          {mode !== 'season' && rasters.data?.[0]?.slice && rasters.data[0].slice.downsample > 1 && (
             <Chip title={`Mean-pooled ${rasters.data[0].slice.downsample}× to stay inside the cell budget`}>
               {rasters.data[0].slice.downsample}× pooled
             </Chip>
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          <span role="status" className="text-[11px] text-[var(--text-muted)]">
+          <span role="status" className={mode === 'season' ? 'hidden' : 'text-[11px] text-[var(--text-muted)]'}>
             {infos.loading || rasters.loading
               ? `Loading ${panels.length} ${panels.length === 1 ? 'panel' : 'panels'}…`
               : `${renderedPanels} ${renderedPanels === 1 ? 'panel' : 'panels'} rendered`}
@@ -282,7 +284,7 @@ export function PhenometricsView() {
             </Button>
           )}
           <FigureMenu
-            disabled={renderedPanels === 0}
+            disabled={renderedPanels === 0 || mode === 'season'}
             actions={{
               save: async () => downloadBlob(await canvasToBlob(renderFigure()), exportName()),
               copy: () => copyImage(canvasToBlob(renderFigure())),
@@ -298,7 +300,13 @@ export function PhenometricsView() {
           nothing must not be indistinguishable from one still in flight, or the
           view spins forever.
         */}
-        {infos.error ? (
+        {mode === 'season' ? (
+          site?.manifest.netcdf.length ? (
+            <PhenoSeason manifest={site.manifest} layer={layer} available={sharedLayers} />
+          ) : (
+            <EmptyState icon={<Layers size={22} />} title="No NetCDF imported for this site." />
+          )
+        ) : infos.error ? (
           <ErrorPanel message={infos.error} onRetry={infos.reload} />
         ) : infos.loading ? (
           <LoadingPanel progress={infos.progress} label="Opening NetCDF" onCancel={infos.cancel} />
@@ -376,7 +384,7 @@ export function PhenometricsView() {
         )}
       </div>
 
-      {!infos.loading && !infos.error && displayedLayer && scales?.[0] && (
+      {mode !== 'season' && !infos.loading && !infos.error && displayedLayer && scales?.[0] && (
         <LegendBar
           layer={displayedLayer}
           scale={scales[0]}
@@ -433,6 +441,14 @@ function Panel({
 
       {!panel.slice || !scale ? (
         <ErrorPanel message={panel.error ?? `"${layer}" is not in this file.`} />
+      ) : panel.slice.finiteCount === 0 ? (
+        // A year file can exist with every cell at its fill value: say so rather than draw empty axes.
+        <div className="grid h-full place-items-center p-6 text-center">
+          <div>
+            <p className="text-[13px] font-medium">No valid estimates for {layer} in {panel.year}.</p>
+            <p className="mt-1 text-[12px] text-[var(--text-muted)]">Every cell in this layer is a fill value.</p>
+          </div>
+        </div>
       ) : mode === 'relief' ? (
         <Raster3D
           ref={reliefRef}

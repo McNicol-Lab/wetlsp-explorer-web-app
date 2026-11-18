@@ -127,6 +127,26 @@ export const PlotlyChart = forwardRef<
     };
   }, []);
 
+  // `responsive` only follows window resizes; panels opening, the season
+  // ribbon or a collapsing sidebar change the box too. Follow the box itself.
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    let frame = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const plotly = plotlyRef.current as { Plots?: { resize: (e: HTMLElement) => unknown } } | null;
+        if (plotly?.Plots && (el as HTMLDivElement & { data?: unknown }).data) void plotly.Plots.resize(el);
+      });
+    });
+    ro.observe(el);
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+    };
+  }, []);
+
   return (
     <div className={className ?? 'relative h-full w-full'}>
       <div ref={hostRef} className="h-full w-full" />
@@ -181,6 +201,7 @@ export function plotTheme(dark: boolean): PlotLayout {
       tickfont: { color: muted, size: 11 },
       title: { font: { color: muted, size: 11.5 } },
     },
+    modebar: { bgcolor: 'rgba(0,0,0,0)', color: muted },
     legend: {
       orientation: 'h',
       y: 1.08,
